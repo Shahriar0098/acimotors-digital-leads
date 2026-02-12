@@ -409,7 +409,7 @@
     <div id="toast" class="toast"><i class="fas fa-info-circle"></i><span id="toast-msg"></span></div>
 
     <script>
-        const API_BASE = 'https://acimotors-digital-leads.pages.dev/api';
+        const API_BASE = '/api'; // Relative path is safest for Cloudflare Pages same-origin deployment
         
         let currentUser = null, currentRole = null, currentBusiness = null;
         let allOfficers = [], businessList = [], businessIcons = {};
@@ -449,14 +449,14 @@
                 
                 const res = await fetch(url, opts);
                 
-                // Read text first so we don't crash the browser parsing an HTML fallback error
+                // Read text first to handle non-JSON responses (like 404/500 HTML pages) gracefully
                 const text = await res.text();
                 
                 let data;
                 try {
                     data = JSON.parse(text);
                 } catch (e) {
-                    throw new Error("Backend routing error (Received HTML instead of JSON).");
+                    throw new Error(`Server returned non-JSON response: ${text.substring(0, 50)}...`);
                 }
 
                 if (!res.ok) {
@@ -464,7 +464,8 @@
                 }
                 return data;
             } catch (e) {
-                console.warn(`API Exception on ${endpoint}:`, e);
+                console.error(`API Exception on ${endpoint}:`, e);
+                // Re-throw so specific handlers can show toasts
                 throw e; 
             }
         }
@@ -623,7 +624,8 @@
                     allOfficers = initData.officers || [];
                 }
             } catch (e) {
-                showToast('DB Error: ' + e.message, 'error');
+                showToast('Connection Failed: ' + e.message, 'error');
+                console.error(e);
             } finally {
                 hideLoader();
             }
@@ -1592,7 +1594,11 @@
                                     const mm = String(d.getMonth() + 1).padStart(2, '0');
                                     const dd = String(d.getDate()).padStart(2, '0');
                                     parsedDate = `${yyyy}-${mm}-${dd}`;
+                                } else {
+                                    parsedDate = null; // Important: Send null for invalid dates so Postgres doesn't reject it
                                 }
+                            } else {
+                                parsedDate = null;
                             }
 
                             const c = { id: "cust-" + Date.now() + Math.random(), customer_no: cols[0], name: cols[1], date: parsedDate, address: cols[3], model: cols[4], sale_type: cols[5], officer_id: offId, officer_name: offName, business: currentBusiness, visit_completed: 'No' };

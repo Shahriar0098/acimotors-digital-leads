@@ -538,6 +538,7 @@
             document.getElementById('confirm-msg').textContent = `Are you sure you want to delete ${ids.length} selected officer(s)? This cannot be undone.`;
             
             confirmCallback = async () => {
+                showLoader();
                 try {
                     // Batch delete locally
                     const originalCount = MOCK_DATA.officers.length;
@@ -548,7 +549,7 @@
 
                     // Send API requests (background)
                     for (const id of ids) {
-                        apiCall(`/officers/${id}`, 'DELETE');
+                        await apiCall(`/officers/${id}`, 'DELETE');
                     }
                     
                     showToast(`Deleted ${deletedCount} officers`, 'success');
@@ -564,6 +565,8 @@
                 } catch (error) {
                     console.error(error);
                     showToast('Error deleting officers', 'error');
+                } finally {
+                    hideLoader();
                 }
             };
             
@@ -572,11 +575,16 @@
 
         window.deleteOfficer = async function(id) {
             if(confirm('Are you sure you want to delete this officer?')) {
-                await apiCall(`/officers/${id}`, 'DELETE');
-                MOCK_DATA.officers = MOCK_DATA.officers.filter(o => o.id !== id); 
-                saveDataToStorage(); 
-                loadOfficers(); 
-                showToast('Officer Deleted', 'success');
+                showLoader();
+                try {
+                    await apiCall(`/officers/${id}`, 'DELETE');
+                    MOCK_DATA.officers = MOCK_DATA.officers.filter(o => o.id !== id); 
+                    saveDataToStorage(); 
+                    loadOfficers(); 
+                    showToast('Officer Deleted', 'success');
+                } finally {
+                    hideLoader();
+                }
             }
         };
 
@@ -1150,29 +1158,40 @@
                 return;
             }
 
-            const id = document.getElementById('customer-id').value; const officerSelect = document.getElementById('customer-officer');
-            // Use the updated phoneNo variable here
-            const data = { id: id || "cust-"+Date.now(), customer_no: phoneNo, name: document.getElementById('customer-name').value, date: document.getElementById('customer-date').value, address: document.getElementById('customer-address').value, model: document.getElementById('customer-model').value, sale_type: document.getElementById('customer-sale-type').value, officer_id: officerSelect.value, officer_name: officerSelect.options[officerSelect.selectedIndex]?.text || 'Unassigned', business: currentBusiness };
-            await apiCall('/customers', 'POST', data);
-            
-            // Local fallback
-            if(id) { const c = MOCK_DATA.customers.find(x=>x.id===id); Object.assign(c, data); } else { MOCK_DATA.customers.unshift(data); }
-            saveDataToStorage();
-            
-            showToast('Saved', 'success'); closeCustomerModal(); loadCustomersData();
+            showLoader();
+            try {
+                const id = document.getElementById('customer-id').value; const officerSelect = document.getElementById('customer-officer');
+                // Use the updated phoneNo variable here
+                const data = { id: id || "cust-"+Date.now(), customer_no: phoneNo, name: document.getElementById('customer-name').value, date: document.getElementById('customer-date').value, address: document.getElementById('customer-address').value, model: document.getElementById('customer-model').value, sale_type: document.getElementById('customer-sale-type').value, officer_id: officerSelect.value, officer_name: officerSelect.options[officerSelect.selectedIndex]?.text || 'Unassigned', business: currentBusiness };
+                await apiCall('/customers', 'POST', data);
+                
+                // Local fallback
+                if(id) { const c = MOCK_DATA.customers.find(x=>x.id===id); Object.assign(c, data); } else { MOCK_DATA.customers.unshift(data); }
+                saveDataToStorage();
+                
+                showToast('Saved', 'success'); closeCustomerModal(); loadCustomersData();
+            } finally {
+                hideLoader();
+            }
         }
 
         function openOfficerModal(id) { document.getElementById('officer-modal').classList.remove('hidden'); document.getElementById('officer-form').reset(); document.getElementById('officer-id').value = id || ''; if(id){ const o = MOCK_DATA.officers.find(x=>x.id===id); if(o){ document.getElementById('officer-name').value=o.full_name; document.getElementById('officer-territory').value=o.territory; document.getElementById('officer-form-password').value=o.password; } document.getElementById('officer-modal-title').textContent="Edit Officer"; } else { document.getElementById('officer-modal-title').textContent="Create Officer"; } }
         function closeOfficerModal() { document.getElementById('officer-modal').classList.add('hidden'); }
         async function handleSaveOfficer(e) {
-            e.preventDefault(); const id = document.getElementById('officer-id').value; const data = { id: id || "off-"+Date.now(), full_name: document.getElementById('officer-name').value, territory: document.getElementById('officer-territory').value, password: document.getElementById('officer-form-password').value, role: 'officer', business: currentBusiness };
-            await apiCall('/officers', 'POST', data);
-            
-            // Local fallback
-            if(id && !id.startsWith("off-")) { const i = MOCK_DATA.officers.findIndex(x=>x.id===id); MOCK_DATA.officers[i] = {...MOCK_DATA.officers[i], ...data}; } else { MOCK_DATA.officers.push(data); }
-            saveDataToStorage();
-            
-            closeOfficerModal(); loadOfficers(); showToast('Saved', 'success');
+            e.preventDefault(); 
+            showLoader();
+            try {
+                const id = document.getElementById('officer-id').value; const data = { id: id || "off-"+Date.now(), full_name: document.getElementById('officer-name').value, territory: document.getElementById('officer-territory').value, password: document.getElementById('officer-form-password').value, role: 'officer', business: currentBusiness };
+                await apiCall('/officers', 'POST', data);
+                
+                // Local fallback
+                if(id && !id.startsWith("off-")) { const i = MOCK_DATA.officers.findIndex(x=>x.id===id); MOCK_DATA.officers[i] = {...MOCK_DATA.officers[i], ...data}; } else { MOCK_DATA.officers.push(data); }
+                saveDataToStorage();
+                
+                closeOfficerModal(); loadOfficers(); showToast('Saved', 'success');
+            } finally {
+                hideLoader();
+            }
         }
 
         function openVisitModal(id) { 
@@ -1484,23 +1503,33 @@
         function closeAdminModal() { document.getElementById('admin-modal').classList.add('hidden'); }
         document.getElementById('admin-form').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const data = {
-                id: "adm-" + Date.now(),
-                full_name: document.getElementById('admin-name').value,
-                territory: "Head Office",
-                password: document.getElementById('admin-form-password').value,
-                role: document.getElementById('admin-role').value,
-                business: currentBusiness
-            };
-            await apiCall('/officers', 'POST', data);
-            MOCK_DATA.officers.push(data); saveDataToStorage(); 
-            showToast('Admin Created', 'success'); closeAdminModal(); loadOfficers();
+            showLoader();
+            try {
+                const data = {
+                    id: "adm-" + Date.now(),
+                    full_name: document.getElementById('admin-name').value,
+                    territory: "Head Office",
+                    password: document.getElementById('admin-form-password').value,
+                    role: document.getElementById('admin-role').value,
+                    business: currentBusiness
+                };
+                await apiCall('/officers', 'POST', data);
+                MOCK_DATA.officers.push(data); saveDataToStorage(); 
+                showToast('Admin Created', 'success'); closeAdminModal(); loadOfficers();
+            } finally {
+                hideLoader();
+            }
         });
         window.deleteAdmin = async function(id) {
             if(confirm('Delete this admin?')) {
-                await apiCall(`/officers/${id}`, 'DELETE');
-                MOCK_DATA.officers = MOCK_DATA.officers.filter(o => o.id !== id); saveDataToStorage(); 
-                loadOfficers(); showToast('Deleted', 'success');
+                showLoader();
+                try {
+                    await apiCall(`/officers/${id}`, 'DELETE');
+                    MOCK_DATA.officers = MOCK_DATA.officers.filter(o => o.id !== id); saveDataToStorage(); 
+                    loadOfficers(); showToast('Deleted', 'success');
+                } finally {
+                    hideLoader();
+                }
             }
         };
 
@@ -1643,4 +1672,5 @@
         }
     </script>
 </body>
+
 </html>

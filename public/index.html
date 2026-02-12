@@ -406,24 +406,17 @@
     <div id="toast" class="toast"><i class="fas fa-info-circle"></i><span id="toast-msg"></span></div>
 
     <script>
-        // Use relative path for production (Cloudflare) or localhost.
-        // Use absolute path for Canvas Preview environment to prevent 'Failed to parse URL' error.
-        const isLocalOrCloudflare = window.location.hostname === 'localhost' || 
-                                    window.location.hostname === '127.0.0.1' || 
-                                    window.location.hostname.endsWith('pages.dev');
-
-        const API_BASE = isLocalOrCloudflare ? '/api' : 'https://acimotors-digital-leads.pages.dev/api';
+        const API_BASE = '/api';
         
         let currentUser = null, currentRole = null, currentBusiness = null;
         let allOfficers = [], businessList = [], businessIcons = {};
-        let currentCustomersList = []; // Replaces MOCK_DATA.customers for local state handling
+        let currentCustomersList = []; 
         
         let currentSaleType = 'Resale', currentOfficerSaleType = 'Resale';
         let topOfficersChart = null, leadChart = null, confirmCallback = null;
         let loadingRequestCount = 0; 
         let isSuperAdminVerification = false;
 
-        // Loader Functions - Creatively solved popup block by removing .hidden and enforcing a visual perception delay
         let loaderTimeout;
         function showLoader() {
              const overlay = document.getElementById('loading-overlay');
@@ -454,9 +447,8 @@
                 }
                 return await res.json();
             } catch (e) {
-                // Return a clean warning instead of throwing an unhandled crashing error in preview
-                console.warn(`Backend connection failed for ${endpoint}. If you are in the preview, ensure your backend CORS is configured.`);
-                throw e; // We MUST throw here so callers (try/catch blocks) know it failed
+                console.error('API Error:', e);
+                throw e; 
             }
         }
 

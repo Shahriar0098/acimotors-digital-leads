@@ -1,43 +1,27 @@
 import { Hono } from 'hono';
 import { handle } from 'hono/cloudflare-pages';
-import { Pool } from '@neondatabase/serverless';
+import { neon } from '@neondatabase/serverless';
 
 const app = new Hono().basePath('/api');
 
-// --- Middleware: Database Connection ---
-app.use('*', async (c, next) => {
-    // 1. Connect to Neon using the Env Variable provided by Cloudflare
-    if (!c.env.DATABASE_URL) {
-        return c.json({ error: 'DATABASE_URL not set' }, 500);
-    }
-    const pool = new Pool({ connectionString: c.env.DATABASE_URL });
-    c.set('pool', pool);
-    
-    await next();
-    
-    // 2. Cleanup connection (Best practice for serverless)
-    c.executionCtx.waitUntil(pool.end());
-});
-
-// --- API Routes ---
-
 // 1. Init Data
 app.get('/init', async (c) => {
-    const pool = c.get('pool');
     try {
-        const businessesRes = await pool.query('SELECT * FROM businesses');
-        const officersRes = await pool.query('SELECT * FROM officers');
+        // Use neon() HTTP fetch instead of Pool WebSockets for Cloudflare Edge stability!
+        const sql = neon(c.env.DATABASE_URL);
+        const businessesRes = await sql`SELECT * FROM businesses`;
+        const officersRes = await sql`SELECT * FROM officers`;
 
-        const businesses = businessesRes.rows.map(b => b.name);
+        const businesses = businessesRes.map(b => b.name);
         const icons = {};
-        businessesRes.rows.forEach(b => {
+        businessesRes.forEach(b => {
             if (b.icon) icons[b.name] = b.icon;
         });
 
         return c.json({
             businesses,
             icons,
-            officers: officersRes.rows
+            officers: officersRes
         });
     } catch (err) {
         return c.json({ error: err.message }, 500);
@@ -46,34 +30,38 @@ app.get('/init', async (c) => {
 
 // 2. Customers CRUD
 app.get('/customers', async (c) => {
-    const pool = c.get('pool');
-    const business = c.req.query('business');
     try {
-        let query = 'SELECT * FROM customers';
-        const params = [];
+        const sql = neon(c.env.DATABASE_URL);
+        const business = c.req.query('business');
         
+        let result;
         if (business) {
-            query += ' WHERE business = $1';
-            params.push(business);
+            result = await sql`SELECT * FROM customers WHERE business = ${business}`;
+        } else {
+            result = await sql`SELECT * FROM customers`;
         }
         
-        const result = await pool.query(query, params);
-        return c.json(result.rows);
+        return c.json(result);
     } catch (err) {
         return c.json({ error: err.message }, 500);
     }
 });
 
 app.post('/customers', async (c) => {
-    const pool = c.get('pool');
     try {
+        const sql = neon(c.env.DATABASE_URL);
         const cust = await c.req.json();
-        const query = `
+        
+        await sql`
             INSERT INTO customers (
                 id, customer_no, name, date, address, model, sale_type, 
                 officer_id, officer_name, business, visit_completed, 
                 customer_type, field_visit_notes, booking_info, delivery_info
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            ) VALUES (
+                ${cust.id}, ${cust.customer_no}, ${cust.name}, ${cust.date}, ${cust.address}, ${cust.model}, ${cust.sale_type},
+                ${cust.officer_id}, ${cust.officer_name}, ${cust.business}, ${cust.visit_completed || 'No'},
+                ${cust.customer_type}, ${cust.field_visit_notes}, ${cust.booking_info}, ${cust.delivery_info}
+            )
             ON CONFLICT (id) DO UPDATE SET
                 customer_no = EXCLUDED.customer_no,
                 name = EXCLUDED.name,
@@ -90,13 +78,6 @@ app.post('/customers', async (c) => {
                 booking_info = EXCLUDED.booking_info,
                 delivery_info = EXCLUDED.delivery_info;
         `;
-        const values = [
-            cust.id, cust.customer_no, cust.name, cust.date, cust.address, cust.model, cust.sale_type,
-            cust.officer_id, cust.officer_name, cust.business, cust.visit_completed || 'No',
-            cust.customer_type, cust.field_visit_notes, cust.booking_info, cust.delivery_info
-        ];
-        
-        await pool.query(query, values);
         return c.json({ success: true });
     } catch (err) {
         return c.json({ error: err.message }, 500);
@@ -104,10 +85,10 @@ app.post('/customers', async (c) => {
 });
 
 app.delete('/customers/:id', async (c) => {
-    const pool = c.get('pool');
-    const id = c.req.param('id');
     try {
-        await pool.query('DELETE FROM customers WHERE id = $1', [id]);
+        const sql = neon(c.env.DATABASE_URL);
+        const id = c.req.param('id');
+        await sql`DELETE FROM customers WHERE id = ${id}`;
         return c.json({ success: true });
     } catch (err) {
         return c.json({ error: err.message }, 500);
@@ -116,22 +97,23 @@ app.delete('/customers/:id', async (c) => {
 
 // 3. Officers CRUD
 app.get('/officers', async (c) => {
-    const pool = c.get('pool');
     try {
-        const result = await pool.query('SELECT * FROM officers');
-        return c.json(result.rows);
+        const sql = neon(c.env.DATABASE_URL);
+        const result = await sql`SELECT * FROM officers`;
+        return c.json(result);
     } catch (err) {
         return c.json({ error: err.message }, 500);
     }
 });
 
 app.post('/officers', async (c) => {
-    const pool = c.get('pool');
     try {
+        const sql = neon(c.env.DATABASE_URL);
         const o = await c.req.json();
-        const query = `
+        
+        await sql`
             INSERT INTO officers (id, full_name, territory, password, role, business)
-            VALUES ($1, $2, $3, $4, $5, $6)
+            VALUES (${o.id}, ${o.full_name}, ${o.territory}, ${o.password}, ${o.role}, ${o.business})
             ON CONFLICT (id) DO UPDATE SET
                 full_name = EXCLUDED.full_name,
                 territory = EXCLUDED.territory,
@@ -139,7 +121,6 @@ app.post('/officers', async (c) => {
                 role = EXCLUDED.role,
                 business = EXCLUDED.business;
         `;
-        await pool.query(query, [o.id, o.full_name, o.territory, o.password, o.role, o.business]);
         return c.json({ success: true });
     } catch (err) {
         return c.json({ error: err.message }, 500);
@@ -147,10 +128,10 @@ app.post('/officers', async (c) => {
 });
 
 app.delete('/officers/:id', async (c) => {
-    const pool = c.get('pool');
-    const id = c.req.param('id');
     try {
-        await pool.query('DELETE FROM officers WHERE id = $1', [id]);
+        const sql = neon(c.env.DATABASE_URL);
+        const id = c.req.param('id');
+        await sql`DELETE FROM officers WHERE id = ${id}`;
         return c.json({ success: true });
     } catch (err) {
         return c.json({ error: err.message }, 500);
@@ -159,10 +140,10 @@ app.delete('/officers/:id', async (c) => {
 
 // 4. Businesses CRUD
 app.post('/businesses', async (c) => {
-    const pool = c.get('pool');
     try {
+        const sql = neon(c.env.DATABASE_URL);
         const { name, icon } = await c.req.json();
-        await pool.query('INSERT INTO businesses (name, icon) VALUES ($1, $2) ON CONFLICT (name) DO UPDATE SET icon = $2', [name, icon]);
+        await sql`INSERT INTO businesses (name, icon) VALUES (${name}, ${icon}) ON CONFLICT (name) DO UPDATE SET icon = ${icon}`;
         return c.json({ success: true });
     } catch (err) {
         return c.json({ error: err.message }, 500);
@@ -170,15 +151,14 @@ app.post('/businesses', async (c) => {
 });
 
 app.delete('/businesses/:name', async (c) => {
-    const pool = c.get('pool');
-    const name = c.req.param('name');
     try {
-        await pool.query('DELETE FROM businesses WHERE name = $1', [name]);
+        const sql = neon(c.env.DATABASE_URL);
+        const name = c.req.param('name');
+        await sql`DELETE FROM businesses WHERE name = ${name}`;
         return c.json({ success: true });
     } catch (err) {
         return c.json({ error: err.message }, 500);
     }
 });
 
-// Export the Hono handler for Cloudflare Pages Functions
 export const onRequest = handle(app);

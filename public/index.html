@@ -217,7 +217,7 @@
                 <div class="loading-dots">
                     <span></span><span></span><span></span>
                 </div>
-                <p style="margin-top: 10px; font-size: 0.9rem;">Loading Portfolios...</p>
+                <p style="margin-top: 10px; font-size: 0.9rem;">Connecting to Server...</p>
             </div>
         </div>
         <div class="super-admin-link" onclick="openSuperAdminAuth()"><i class="fas fa-cog"></i> Manage Portfolios</div>
@@ -406,33 +406,21 @@
     <div id="toast" class="toast"><i class="fas fa-info-circle"></i><span id="toast-msg"></span></div>
 
     <script>
-        const API_BASE = '/api'; 
-        
-        // MOCK DATA (Fallback)
-        const DEFAULT_MOCK_DATA = {
-            officers: [
-                { id: "adm-001", full_name: "admin", territory: "Head Office", role: "admin", password: "admin@4321" },
-                { id: "off-cv-01", full_name: "Rahim Uddin", territory: "Dhaka North", role: "officer", password: "123", business: "Commercial Vehicle" },
-                { id: "off-ag-01", full_name: "Abdul Karim", territory: "Bogura", role: "officer", password: "123", business: "Agricultural Machinery" },
-                { id: "off-eco-01", full_name: "Suman Roy", territory: "Gulshan", role: "officer", password: "123", business: "Power Solution" },
-                { id: "off-tr-01", full_name: "Babul Hossain", territory: "Rangpur", role: "officer", password: "123", business: "Tractor" }
-            ],
-            customers: [
-                { id: "cust-cv-01", customer_no: "01711000001", name: "Haji Transport", date: "2023-11-01", address: "Tejgaon", model: "Tata Ace", sale_type: "New", officer_id: "off-cv-01", officer_name: "Rahim Uddin", business: "Commercial Vehicle", visit_completed: "Yes", customer_type: "Hot", field_visit_notes: "Interested in 2 units", booking_info: null },
-                { id: "cust-ag-01", customer_no: "01711000002", name: "Green Farms", date: "2023-11-05", address: "Sherpur", model: "Harvester", sale_type: "New", officer_id: "off-ag-01", officer_name: "Abdul Karim", business: "Agricultural Machinery", visit_completed: "No", customer_type: "Warm", field_visit_notes: "" },
-                { id: "cust-eco-01", customer_no: "01711000003", name: "Tech Solutions", date: "2023-11-10", address: "Banani", model: "Delta Pro", sale_type: "Resale", officer_id: "off-eco-01", officer_name: "Suman Roy", business: "Power Solution", visit_completed: "Yes", customer_type: "Cold", field_visit_notes: "Price too high", delivery_info: "DELIVERED" },
-                { id: "cust-tr-01", customer_no: "01711000004", name: "Krishi Khamar", date: "2023-11-12", address: "Dinajpur", model: "Sonalika 750", sale_type: "New", officer_id: "off-tr-01", officer_name: "Babul Hossain", business: "Tractor", visit_completed: "No", customer_type: "Hot", field_visit_notes: "" }
-            ], 
-            businesses: ['Commercial Vehicle', 'Tractor', 'Agricultural Machinery', 'Power Solution']
-        };
-        const DEFAULT_ICONS = { 'Commercial Vehicle': 'fa-truck-fast', 'Tractor': 'fa-tractor', 'Agricultural Machinery': 'fa-wheat-awn', 'Power Solution': 'fa-car-battery' };
+        // Use relative path for production (Cloudflare) or localhost.
+        // Use absolute path for Canvas Preview environment to prevent 'Failed to parse URL' error.
+        const isLocalOrCloudflare = window.location.hostname === 'localhost' || 
+                                    window.location.hostname === '127.0.0.1' || 
+                                    window.location.hostname.endsWith('pages.dev');
 
-        let MOCK_DATA = JSON.parse(JSON.stringify(DEFAULT_MOCK_DATA));
+        const API_BASE = isLocalOrCloudflare ? '/api' : 'https://acimotors-digital-leads.pages.dev/api';
+        
         let currentUser = null, currentRole = null, currentBusiness = null;
         let allOfficers = [], businessList = [], businessIcons = {};
+        let currentCustomersList = []; // Replaces MOCK_DATA.customers for local state handling
+        
         let currentSaleType = 'Resale', currentOfficerSaleType = 'Resale';
         let topOfficersChart = null, leadChart = null, confirmCallback = null;
-        let loadingRequestCount = 0; // State for loader
+        let loadingRequestCount = 0; 
         let isSuperAdminVerification = false;
 
         // Loader Functions - Creatively solved popup block by removing .hidden and enforcing a visual perception delay
@@ -440,12 +428,11 @@
         function showLoader() {
              const overlay = document.getElementById('loading-overlay');
              clearTimeout(loaderTimeout);
-             overlay.classList.remove('hidden'); // .hidden has display:none !important which was blocking it
+             overlay.classList.remove('hidden'); 
              overlay.classList.add('active');
         }
 
         function hideLoader() {
-             // Minimum 500ms delay so the processing screen is visible even for instant local MOCK operations
              loaderTimeout = setTimeout(() => {
                  const overlay = document.getElementById('loading-overlay');
                  overlay.classList.remove('active');
@@ -454,17 +441,26 @@
         }
 
         async function apiCall(endpoint, method = 'GET', body = null) {
-            // REMOVED LOADER AND DELAY FOR INSTANT UPDATE - Animation handled in UI
             try {
                 const opts = { method, headers: { 'Content-Type': 'application/json' } };
                 if (body) opts.body = JSON.stringify(body);
-                const res = await fetch(`${API_BASE}${endpoint}`, opts);
-                if (!res.ok) throw new Error('API Error');
+                
+                const url = `${API_BASE}${endpoint}`;
+                const res = await fetch(url, opts);
+                
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({}));
+                    throw new Error(err.error || 'API Error');
+                }
                 return await res.json();
-            } catch (e) { return null; }
+            } catch (e) {
+                // Return a clean warning instead of throwing an unhandled crashing error in preview
+                console.warn(`Backend connection failed for ${endpoint}. If you are in the preview, ensure your backend CORS is configured.`);
+                throw e; // We MUST throw here so callers (try/catch blocks) know it failed
+            }
         }
 
-        // --- BULK ACTION HANDLERS (DEFINED EARLY) ---
+        // --- BULK ACTION HANDLERS ---
         window.updateDeleteButtonState = function() {
             const selectedCount = document.querySelectorAll('.customer-checkbox:checked').length;
             const btn = document.getElementById('delete-selected-btn');
@@ -486,35 +482,31 @@
             
             if (ids.length === 0) return;
             
-            // Use custom modal instead of native confirm
             document.getElementById('confirm-title').textContent = 'Delete Customers';
             document.getElementById('confirm-msg').textContent = `Are you sure you want to delete ${ids.length} selected customer(s)? This cannot be undone.`;
             
             confirmCallback = async () => {
-                showLoader(); // Enable visual feedback
+                showLoader(); 
                 try {
                     let successCount = 0;
+                    // Cloud API Deletes
                     for (const id of ids) {
                         await apiCall(`/customers/${id}`, 'DELETE'); 
-                        // Local delete fallback
-                        const idx = MOCK_DATA.customers.findIndex(c => c.id === id);
-                        if (idx > -1) {
-                            MOCK_DATA.customers.splice(idx, 1);
-                            successCount++;
-                        }
+                        successCount++;
                     }
-                    saveDataToStorage();
                     showToast(`Deleted ${successCount} customers`, 'success');
-                    loadCustomersData();
+                    
+                    // Pull fresh data from cloud
+                    await loadCustomersData();
+                    
                     // Reset selection state
                     updateDeleteButtonState();
                     const headerCheckbox = document.querySelector('#customers-table thead input[type="checkbox"]');
                     if (headerCheckbox) headerCheckbox.checked = false;
                 } catch (error) {
-                    console.error(error);
                     showToast('Error deleting data', 'error');
                 } finally {
-                    hideLoader(); // Disable visual feedback
+                    hideLoader();
                 }
             };
             
@@ -549,21 +541,16 @@
             confirmCallback = async () => {
                 showLoader();
                 try {
-                    // Batch delete locally
-                    const originalCount = MOCK_DATA.officers.length;
-                    MOCK_DATA.officers = MOCK_DATA.officers.filter(o => !ids.includes(o.id));
-                    const deletedCount = originalCount - MOCK_DATA.officers.length;
-                    
-                    saveDataToStorage();
-
-                    // Send API requests (background)
+                    // Send API requests directly to cloud
+                    let deletedCount = 0;
                     for (const id of ids) {
                         await apiCall(`/officers/${id}`, 'DELETE');
+                        deletedCount++;
                     }
                     
                     showToast(`Deleted ${deletedCount} officers`, 'success');
                     
-                    // Refresh UI
+                    // Pull fresh UI
                     await loadOfficers();
                     updateOfficerDeleteButtonState();
                     
@@ -572,7 +559,6 @@
                     if (headerCheckbox) headerCheckbox.checked = false;
 
                 } catch (error) {
-                    console.error(error);
                     showToast('Error deleting officers', 'error');
                 } finally {
                     hideLoader();
@@ -587,10 +573,10 @@
                 showLoader();
                 try {
                     await apiCall(`/officers/${id}`, 'DELETE');
-                    MOCK_DATA.officers = MOCK_DATA.officers.filter(o => o.id !== id); 
-                    saveDataToStorage(); 
                     loadOfficers(); 
                     showToast('Officer Deleted', 'success');
+                } catch(e) {
+                    showToast('Failed to delete officer', 'error');
                 } finally {
                     hideLoader();
                 }
@@ -618,19 +604,22 @@
         document.addEventListener('DOMContentLoaded', async () => {
             document.getElementById('current-year').textContent = new Date().getFullYear();
             
-            // [FIX] Load local data immediately to prevent blocking/hanging on network
-            // This ensures the loading animation is replaced instantly
+            // Fetch configuration directly from cloud initially
+            showLoader();
             try {
-                loadDataFromStorage();
+                const initData = await apiCall('/init');
+                if (initData) {
+                    businessList = initData.businesses || [];
+                    businessIcons = initData.icons || {};
+                    allOfficers = initData.officers || [];
+                }
             } catch (e) {
-                console.error("Error loading storage, resetting to defaults", e);
-                // Fallback to defaults to ensure UI renders
-                businessList = [...DEFAULT_MOCK_DATA.businesses];
-                businessIcons = {...DEFAULT_ICONS};
-                MOCK_DATA.officers = [...DEFAULT_MOCK_DATA.officers];
-                MOCK_DATA.customers = [...DEFAULT_MOCK_DATA.customers];
+                console.warn("Initialization Failed: Falling back to empty state. Backend unreachable.");
+            } finally {
+                hideLoader();
             }
             
+            // Check for persistent user session
             let session = null;
             try {
                 session = JSON.parse(localStorage.getItem('currentSession'));
@@ -643,96 +632,26 @@
             }
             
             setupEventListeners();
-
-            // Try fetch initial data from server in background (non-blocking)
-            // This ensures the process is not slowed down by network timeouts
-            apiCall('/init').then(initData => {
-                if (initData) {
-                    businessList = initData.businesses;
-                    businessIcons = initData.icons;
-                    MOCK_DATA.officers = initData.officers;
-                    saveDataToStorage(); // Sync new data
-                    
-                    // If user is still on landing screen, refresh the grid to show any new portfolios
-                    const landingScreen = document.getElementById('landing-screen');
-                    if(landingScreen && landingScreen.style.display !== 'none') {
-                        renderLandingPage();
-                    }
-                }
-            });
         });
 
-        function loadDataFromStorage() {
-            const storedOfficers = localStorage.getItem('aci_officers');
-            const storedCustomers = localStorage.getItem('aci_customers');
-            const storedBusinesses = localStorage.getItem('aci_businesses');
-            const storedIcons = localStorage.getItem('aci_business_icons');
-            
-            if (storedOfficers) {
-                try {
-                    MOCK_DATA.officers = JSON.parse(storedOfficers);
-                    // Force update admin credentials in local storage
-                    const admin = MOCK_DATA.officers.find(o => o.id === "adm-001");
-                    if (admin) {
-                        admin.full_name = "admin";
-                        // admin.password check/update if needed
-                    } else {
-                        // If adm-001 is missing for some reason, add it
-                         MOCK_DATA.officers.push({ id: "adm-001", full_name: "admin", territory: "Head Office", role: "admin", password: "admin@4321" });
-                    }
-                } catch(e) { MOCK_DATA.officers = [...DEFAULT_MOCK_DATA.officers]; }
-            }
-            
-            if (storedCustomers) {
-                try { MOCK_DATA.customers = JSON.parse(storedCustomers); } 
-                catch(e) { MOCK_DATA.customers = [...DEFAULT_MOCK_DATA.customers]; }
-            }
-            
-            if (storedBusinesses) {
-                try { businessList = JSON.parse(storedBusinesses); }
-                catch(e) { businessList = [...DEFAULT_MOCK_DATA.businesses]; }
-            } else {
-                businessList = [...DEFAULT_MOCK_DATA.businesses];
-            }
-
-            if (storedIcons) {
-                try { businessIcons = JSON.parse(storedIcons); }
-                catch(e) { businessIcons = {...DEFAULT_ICONS}; }
-            } else {
-                businessIcons = {...DEFAULT_ICONS};
-            }
-            
-            saveDataToStorage();
-        }
-        function saveDataToStorage() {
-            localStorage.setItem('aci_officers', JSON.stringify(MOCK_DATA.officers));
-            localStorage.setItem('aci_customers', JSON.stringify(MOCK_DATA.customers));
-            localStorage.setItem('aci_businesses', JSON.stringify(businessList));
-            localStorage.setItem('aci_business_icons', JSON.stringify(businessIcons));
-        }
-
         async function fetchOfficers() {
-            const data = await apiCall('/officers');
-            return { data: data || MOCK_DATA.officers };
+            try {
+                const data = await apiCall('/officers');
+                allOfficers = data || [];
+                return { data: allOfficers };
+            } catch (e) {
+                return { data: [] };
+            }
         }
         
         async function fetchCustomers() {
-            const data = await apiCall(`/customers?business=${encodeURIComponent(currentBusiness)}`);
-            if (data && Array.isArray(data)) {
-                // IMPORTANT: SYNC SERVER DATA WITH LOCAL MOCK_DATA
-                // This ensures that when we click 'edit' or 'update', we find the object in MOCK_DATA
-                // We'll merge server data into MOCK_DATA, prioritizing server data
-                data.forEach(serverCust => {
-                    const idx = MOCK_DATA.customers.findIndex(localCust => localCust.id === serverCust.id);
-                    if (idx !== -1) {
-                        MOCK_DATA.customers[idx] = serverCust;
-                    } else {
-                        MOCK_DATA.customers.push(serverCust);
-                    }
-                });
-                return { data: data };
+            try {
+                const data = await apiCall(`/customers?business=${encodeURIComponent(currentBusiness)}`);
+                currentCustomersList = data || [];
+                return { data: currentCustomersList };
+            } catch (e) {
+                return { data: [] };
             }
-            return { data: MOCK_DATA.customers.filter(c => c.business === currentBusiness) };
         }
 
         function renderLandingPage() {
@@ -745,9 +664,9 @@
         async function loadOfficersForLogin(business) {
             const select = document.getElementById('officer-select'); 
             // Show loading state in dropdown
-            select.innerHTML = '<option value="">Loading names...</option>';
+            select.innerHTML = '<option value="">Connecting to Cloud...</option>';
             
-            const { data } = await fetchOfficers(); allOfficers = data;
+            const { data } = await fetchOfficers();
             
             select.innerHTML = '<option value="">-- Select Name --</option>';
             const filtered = data.filter(o => o.role === 'officer' && (!o.business || o.business === business));
@@ -775,7 +694,7 @@
             btn.innerHTML = `<div class="loading-dots"><span></span><span></span><span></span></div>`;
             btn.disabled = true;
             
-            // Simulate brief delay for UX feel or actual network request time
+            // Ensure visual UX perception
             await new Promise(resolve => setTimeout(resolve, 600));
 
             const { data: officers } = await fetchOfficers();
@@ -784,14 +703,11 @@
                 const u = document.getElementById('admin-username').value; 
                 const p = document.getElementById('admin-password').value;
                 
-                // Allow the specific requested credentials regardless of DB state
+                // Super Admin Emergency Bypass Mechanism
                 if (u === 'admin' && p === 'admin@4321') {
-                     // Check if global admin exists, otherwise use this fallback
                      user = officers.find(o => o.id === "adm-001");
                      if (!user) user = { id: "adm-001", full_name: "admin", territory: "Head Office", role: "admin", password: p };
                 } else {
-                     // IMPORTANT: Filter by Current Business Context or Global
-                     // This enables the "Portfolio Wise" password feature
                      user = officers.find(o => 
                         o.full_name.toLowerCase() === u.toLowerCase() && 
                         o.password === p && 
@@ -803,7 +719,12 @@
                 const id = document.getElementById('officer-select').value; const p = document.getElementById('officer-password').value;
                 user = officers.find(o => o.id == id && o.password === p);
             }
-            if (user) { currentUser = user; currentRole = user.role; localStorage.setItem('currentSession', JSON.stringify({ user, business: currentBusiness })); showApp(); showToast('Welcome!', 'success'); } 
+
+            if (user) { 
+                currentUser = user; currentRole = user.role; 
+                localStorage.setItem('currentSession', JSON.stringify({ user, business: currentBusiness })); 
+                showApp(); showToast('Welcome!', 'success'); 
+            } 
             else { showToast('Invalid Credentials', 'error'); }
             
             // Reset button state
@@ -835,286 +756,295 @@
 
         // --- DASHBOARD ---
         async function loadDashboardData() {
-            const { data } = await fetchCustomers(); 
-            let filtered = data.filter(c => c.sale_type === currentSaleType);
-            
-            // Apply Month Filter
-            const monthVal = document.getElementById('dashboard-filter-month').value;
-            if (monthVal) {
-                filtered = filtered.filter(c => {
-                    if (!c.date) return false;
-                    // Standard string match
-                    if (String(c.date).startsWith(monthVal)) return true;
-                    
-                    // Fallback: Parse date (handles Excel serials & other formats)
-                    let d;
-                    if (!isNaN(c.date) && c.date > 25569 && c.date < 2958465) {
-                         d = new Date((c.date - 25569) * 86400 * 1000);
-                    } else {
-                         const str = String(c.date);
-                         d = new Date(str.includes('T') ? str : str.replace(/-/g, '\/'));
-                    }
-                    
-                    if (isNaN(d.getTime())) return false;
-                    const y = d.getFullYear();
-                    const m = String(d.getMonth() + 1).padStart(2, '0');
-                    return `${y}-${m}` === monthVal;
-                });
-            }
-
-            const stats = { total: filtered.length, visited: filtered.filter(c => c.visit_completed === 'Yes').length, pending: filtered.filter(c => c.visit_completed !== 'Yes' && c.officer_id).length, hot: filtered.filter(c => c.customer_type === 'Hot').length };
-            document.getElementById('dashboard-stats').innerHTML = `<div class="stat-card"><div class="stat-icon" style="background:#E5F6FD;color:var(--primary)"><i class="fas fa-users"></i></div><div class="stat-value">${stats.total}</div><div class="stat-label">Total</div></div><div class="stat-card"><div class="stat-icon" style="background:#E8F8EE;color:var(--secondary)"><i class="fas fa-check-circle"></i></div><div class="stat-value">${stats.visited}</div><div class="stat-label">Visited</div></div><div class="stat-card"><div class="stat-icon" style="background:#FFF4E5;color:var(--warning)"><i class="fas fa-hourglass-half"></i></div><div class="stat-value">${stats.pending}</div><div class="stat-label">Pending</div></div><div class="stat-card"><div class="stat-icon" style="background:#FFEBEA;color:var(--danger)"><i class="fas fa-fire"></i></div><div class="stat-value">${stats.hot}</div><div class="stat-label">Hot</div></div>`;
-            const { data: officers } = await fetchOfficers(); const validOfficers = officers.filter(o => o.role === 'officer' && (!o.business || o.business === currentBusiness));
-            
-            document.getElementById('officer-performance-body').innerHTML = validOfficers.map(o => { 
-                const myCust = filtered.filter(c => c.officer_id === o.id); 
-                if(myCust.length===0) return ''; 
-                const v = myCust.filter(c=>c.visit_completed==='Yes').length; 
-                const pending = myCust.length - v;
-                const pct = Math.round(v/myCust.length*100);
+            showLoader();
+            try {
+                const { data } = await fetchCustomers(); 
+                let filtered = data.filter(c => c.sale_type === currentSaleType);
                 
-                return `<tr>
-                    <td style="color:var(--text-muted); font-size:0.85rem;"><i class="fas fa-map-marker-alt" style="margin-right:4px; opacity:0.5;"></i>${o.territory}</td>
-                    <td><strong>${o.full_name}</strong></td>
-                    <td><span style="font-weight:800; color:var(--text-main); background:#F3F4F6; padding:2px 8px; border-radius:8px;">${myCust.length}</span></td>
-                    <td><span style="font-weight:800; color:var(--secondary);">${v}</span></td>
-                    <td><span style="font-weight:800; color:var(--warning);">${pending}</span></td>
-                    <td><span style="font-weight:800; color:var(--danger);">${myCust.filter(c=>c.customer_type==='Hot').length}</span></td>
-                    <td><span style="font-weight:800; color:var(--info);">${myCust.filter(c=>c.booking_info).length}</span></td>
-                    <td><span style="font-weight:800; color:var(--accent);">${myCust.filter(c=>c.delivery_info).length}</span></td>
-                    <td><span class="badge" style="background:${pct===100?'var(--primary)':'#F3F4F6'}; color:${pct===100?'white':'var(--text-main)'}">${pct}%</span></td>
-                </tr>`; 
-            }).join('') || '<tr><td colspan="9" class="empty-state">No data found for selected period</td></tr>';
-            
-            // Top Officers Chart (Now reflects Top Pending - Large to Bottom)
-            if(topOfficersChart) topOfficersChart.destroy(); 
-            
-            // Calculate Pending Counts
-            const pendingCounts = {}; 
-            filtered.forEach(c => { 
-                // Count if officer exists AND visit is NOT completed
-                if(c.officer_name && c.visit_completed !== 'Yes') {
-                    pendingCounts[c.officer_name] = (pendingCounts[c.officer_name]||0)+1; 
-                }
-            }); 
-            
-            // Sort by count descending (Large to Bottom) and take top 10
-            const sortedPending = Object.entries(pendingCounts)
-                .sort(([,a], [,b]) => b - a)
-                .slice(0, 10);
-
-            topOfficersChart = new Chart(document.getElementById('topOfficersChart'), { 
-                type:'bar', 
-                data: { 
-                    labels: sortedPending.map(item => item[0]), 
-                    datasets: [{
-                        label: 'Pending Tasks',
-                        data: sortedPending.map(item => item[1]), 
-                        backgroundColor: '#F59E0B', // Warning/Amber color for pending
-                        borderRadius: 4,
-                        barPercentage: 0.6
-                    }] 
-                }, 
-                options: {
-                    indexAxis:'y', 
-                    maintainAspectRatio:false, 
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: (ctx) => `${ctx.raw} Pending`
-                            }
+                // Apply Month Filter
+                const monthVal = document.getElementById('dashboard-filter-month').value;
+                if (monthVal) {
+                    filtered = filtered.filter(c => {
+                        if (!c.date) return false;
+                        // Standard string match
+                        if (String(c.date).startsWith(monthVal)) return true;
+                        
+                        // Fallback: Parse date
+                        let d;
+                        if (!isNaN(c.date) && c.date > 25569 && c.date < 2958465) {
+                            d = new Date((c.date - 25569) * 86400 * 1000);
+                        } else {
+                            const str = String(c.date);
+                            d = new Date(str.includes('T') ? str : str.replace(/-/g, '\/'));
                         }
-                    },
-                    scales: {
-                        x: { grid: { display: false } },
-                        y: { grid: { display: false } }
-                    }
-                } 
-            });
+                        
+                        if (isNaN(d.getTime())) return false;
+                        const y = d.getFullYear();
+                        const m = String(d.getMonth() + 1).padStart(2, '0');
+                        return `${y}-${m}` === monthVal;
+                    });
+                }
 
-            // [COLOR UPDATE]: Updated Cold chart segment to use Primary Green
-            if(leadChart) leadChart.destroy(); leadChart = new Chart(document.getElementById('leadChart'), { type:'doughnut', data:{labels:['Hot','Warm','Cold'], datasets:[{data:[filtered.filter(c=>c.customer_type==='Hot').length, filtered.filter(c=>c.customer_type==='Warm').length, filtered.filter(c=>c.customer_type==='Cold').length], backgroundColor:['#FF453A','#FF9F0A','#00A86B']}]}, options:{maintainAspectRatio:false} });
+                const stats = { total: filtered.length, visited: filtered.filter(c => c.visit_completed === 'Yes').length, pending: filtered.filter(c => c.visit_completed !== 'Yes' && c.officer_id).length, hot: filtered.filter(c => c.customer_type === 'Hot').length };
+                document.getElementById('dashboard-stats').innerHTML = `<div class="stat-card"><div class="stat-icon" style="background:#E5F6FD;color:var(--primary)"><i class="fas fa-users"></i></div><div class="stat-value">${stats.total}</div><div class="stat-label">Total</div></div><div class="stat-card"><div class="stat-icon" style="background:#E8F8EE;color:var(--secondary)"><i class="fas fa-check-circle"></i></div><div class="stat-value">${stats.visited}</div><div class="stat-label">Visited</div></div><div class="stat-card"><div class="stat-icon" style="background:#FFF4E5;color:var(--warning)"><i class="fas fa-hourglass-half"></i></div><div class="stat-value">${stats.pending}</div><div class="stat-label">Pending</div></div><div class="stat-card"><div class="stat-icon" style="background:#FFEBEA;color:var(--danger)"><i class="fas fa-fire"></i></div><div class="stat-value">${stats.hot}</div><div class="stat-label">Hot</div></div>`;
+                
+                const { data: officers } = await fetchOfficers(); 
+                const validOfficers = officers.filter(o => o.role === 'officer' && (!o.business || o.business === currentBusiness));
+                
+                document.getElementById('officer-performance-body').innerHTML = validOfficers.map(o => { 
+                    const myCust = filtered.filter(c => c.officer_id === o.id); 
+                    if(myCust.length===0) return ''; 
+                    const v = myCust.filter(c=>c.visit_completed==='Yes').length; 
+                    const pending = myCust.length - v;
+                    const pct = Math.round(v/myCust.length*100);
+                    
+                    return `<tr>
+                        <td style="color:var(--text-muted); font-size:0.85rem;"><i class="fas fa-map-marker-alt" style="margin-right:4px; opacity:0.5;"></i>${o.territory}</td>
+                        <td><strong>${o.full_name}</strong></td>
+                        <td><span style="font-weight:800; color:var(--text-main); background:#F3F4F6; padding:2px 8px; border-radius:8px;">${myCust.length}</span></td>
+                        <td><span style="font-weight:800; color:var(--secondary);">${v}</span></td>
+                        <td><span style="font-weight:800; color:var(--warning);">${pending}</span></td>
+                        <td><span style="font-weight:800; color:var(--danger);">${myCust.filter(c=>c.customer_type==='Hot').length}</span></td>
+                        <td><span style="font-weight:800; color:var(--info);">${myCust.filter(c=>c.booking_info).length}</span></td>
+                        <td><span style="font-weight:800; color:var(--accent);">${myCust.filter(c=>c.delivery_info).length}</span></td>
+                        <td><span class="badge" style="background:${pct===100?'var(--primary)':'#F3F4F6'}; color:${pct===100?'white':'var(--text-main)'}">${pct}%</span></td>
+                    </tr>`; 
+                }).join('') || '<tr><td colspan="9" class="empty-state">No data found for selected period</td></tr>';
+                
+                // Top Officers Chart
+                if(topOfficersChart) topOfficersChart.destroy(); 
+                
+                const pendingCounts = {}; 
+                filtered.forEach(c => { 
+                    if(c.officer_name && c.visit_completed !== 'Yes') {
+                        pendingCounts[c.officer_name] = (pendingCounts[c.officer_name]||0)+1; 
+                    }
+                }); 
+                
+                const sortedPending = Object.entries(pendingCounts)
+                    .sort(([,a], [,b]) => b - a)
+                    .slice(0, 10);
+
+                topOfficersChart = new Chart(document.getElementById('topOfficersChart'), { 
+                    type:'bar', 
+                    data: { 
+                        labels: sortedPending.map(item => item[0]), 
+                        datasets: [{
+                            label: 'Pending Tasks',
+                            data: sortedPending.map(item => item[1]), 
+                            backgroundColor: '#F59E0B', 
+                            borderRadius: 4,
+                            barPercentage: 0.6
+                        }] 
+                    }, 
+                    options: {
+                        indexAxis:'y', 
+                        maintainAspectRatio:false, 
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: { label: (ctx) => `${ctx.raw} Pending` }
+                            }
+                        },
+                        scales: {
+                            x: { grid: { display: false } },
+                            y: { grid: { display: false } }
+                        }
+                    } 
+                });
+
+                if(leadChart) leadChart.destroy(); 
+                leadChart = new Chart(document.getElementById('leadChart'), { 
+                    type:'doughnut', 
+                    data: {
+                        labels:['Hot','Warm','Cold'], 
+                        datasets:[{
+                            data:[
+                                filtered.filter(c=>c.customer_type==='Hot').length, 
+                                filtered.filter(c=>c.customer_type==='Warm').length, 
+                                filtered.filter(c=>c.customer_type==='Cold').length
+                            ], 
+                            backgroundColor:['#FF453A','#FF9F0A','#00A86B']
+                        }]
+                    }, 
+                    options:{maintainAspectRatio:false} 
+                });
+            } finally {
+                hideLoader();
+            }
         }
 
         // --- DATA ENTRY TABLE ---
         async function loadCustomersData() {
-            let { data } = await fetchCustomers();
-            const st = document.getElementById('filter-sale-type').value; const off = document.getElementById('filter-officer').value;
-            if(st && st !== "All Types") data = data.filter(c => c.sale_type === st); 
-            
-            if(off) {
-                if(off === 'Unassigned') data = data.filter(c => !c.officer_id);
-                else data = data.filter(c => c.officer_id === off);
-            }
-            
-            // Helper to format Excel serial dates or standard date strings
-            const formatDateDisplay = (dateStr) => {
-                if (!dateStr) return '-';
+            showLoader();
+            try {
+                let { data } = await fetchCustomers();
+                const st = document.getElementById('filter-sale-type').value; const off = document.getElementById('filter-officer').value;
+                if(st && st !== "All Types") data = data.filter(c => c.sale_type === st); 
                 
-                let date;
-                // Check if it's an Excel serial number (approx range for reasonable dates)
-                if (!isNaN(dateStr) && dateStr > 25569 && dateStr < 2958465) {
-                    // Excel base date: Dec 30, 1899
-                    date = new Date((dateStr - 25569) * 86400 * 1000);
-                } else {
-                    // Prevent timezone shifting for standard YYYY-MM-DD but allow ISO strings
-                    const str = String(dateStr);
-                    date = new Date(str.includes('T') ? str : str.replace(/-/g, '\/'));
+                if(off) {
+                    if(off === 'Unassigned') data = data.filter(c => !c.officer_id);
+                    else data = data.filter(c => c.officer_id === off);
                 }
-
-                if (isNaN(date.getTime())) return dateStr; // Return original if invalid date
-
-                const day = String(date.getDate()).padStart(2, '0');
-                const month = date.toLocaleString('default', { month: 'short' });
-                const year = date.getFullYear().toString().slice(-2);
                 
-                return `${day}-${month}-${year}`;
-            };
-            
-            // [SORTING LOGIC START]
-            // Sort by date descending (Latest first)
-            data.sort((a, b) => {
-                const getTimestamp = (dStr) => {
-                    if (!dStr) return 0;
-                    let d;
-                    if (!isNaN(dStr) && dStr > 25569 && dStr < 2958465) {
-                        d = new Date((dStr - 25569) * 86400 * 1000);
+                const formatDateDisplay = (dateStr) => {
+                    if (!dateStr) return '-';
+                    let date;
+                    if (!isNaN(dateStr) && dateStr > 25569 && dateStr < 2958465) {
+                        date = new Date((dateStr - 25569) * 86400 * 1000);
                     } else {
-                        const str = String(dStr);
-                        d = new Date(str.includes('T') ? str : str.replace(/-/g, '\/'));
+                        const str = String(dateStr);
+                        date = new Date(str.includes('T') ? str : str.replace(/-/g, '\/'));
                     }
-                    return isNaN(d.getTime()) ? 0 : d.getTime();
+                    if (isNaN(date.getTime())) return dateStr; 
+
+                    const day = String(date.getDate()).padStart(2, '0');
+                    const month = date.toLocaleString('default', { month: 'short' });
+                    const year = date.getFullYear().toString().slice(-2);
+                    return `${day}-${month}-${year}`;
                 };
-                return getTimestamp(b.date) - getTimestamp(a.date);
-            });
-            // [SORTING LOGIC END]
+                
+                data.sort((a, b) => {
+                    const getTimestamp = (dStr) => {
+                        if (!dStr) return 0;
+                        let d;
+                        if (!isNaN(dStr) && dStr > 25569 && dStr < 2958465) {
+                            d = new Date((dStr - 25569) * 86400 * 1000);
+                        } else {
+                            const str = String(dStr);
+                            d = new Date(str.includes('T') ? str : str.replace(/-/g, '\/'));
+                        }
+                        return isNaN(d.getTime()) ? 0 : d.getTime();
+                    };
+                    return getTimestamp(b.date) - getTimestamp(a.date);
+                });
 
-            document.getElementById('customers-body').innerHTML = data.map((c,i) => {
-                const assignedOfficer = allOfficers.find(o => o.id === c.officer_id);
-                const inputValue = assignedOfficer ? `${assignedOfficer.full_name} (${assignedOfficer.territory})` : '';
-                const officerInput = `<input type="text" list="officer_datalist_global" class="officer-search-input ${!c.officer_id ? 'unassigned' : ''}" value="${inputValue}" placeholder="${!c.officer_id ? '⚠️ Assign' : 'Search...'}" onchange="handleOfficerAssignmentChange('${c.id}', this)">`;
-                return `<tr><td><input type="checkbox" class="customer-checkbox" value="${c.id}" onchange="updateDeleteButtonState()"></td><td>${i+1}</td><td>${getPhonePill(c.customer_no)}</td><td><strong>${c.name}</strong></td><td>${formatDateDisplay(c.date)}</td><td>${c.address || ''}</td><td>${c.model}</td><td>${officerInput}</td><td>${getSaleTypeBadge(c.sale_type)}</td><td>${getVisitBadge(c.visit_completed)}</td><td>${getLeadBadge(c.customer_type)}</td><td><button class="btn-icon-circle btn-edit" onclick="openCustomerModal('${c.id}')"><i class="fas fa-pen"></i></button></td></tr>`;
-            }).join('');
+                document.getElementById('customers-body').innerHTML = data.map((c,i) => {
+                    const assignedOfficer = allOfficers.find(o => o.id === c.officer_id);
+                    const inputValue = assignedOfficer ? `${assignedOfficer.full_name} (${assignedOfficer.territory})` : '';
+                    const officerInput = `<input type="text" list="officer_datalist_global" class="officer-search-input ${!c.officer_id ? 'unassigned' : ''}" value="${inputValue}" placeholder="${!c.officer_id ? '⚠️ Assign' : 'Search...'}" onchange="handleOfficerAssignmentChange('${c.id}', this)">`;
+                    return `<tr><td><input type="checkbox" class="customer-checkbox" value="${c.id}" onchange="updateDeleteButtonState()"></td><td>${i+1}</td><td>${getPhonePill(c.customer_no)}</td><td><strong>${c.name}</strong></td><td>${formatDateDisplay(c.date)}</td><td>${c.address || ''}</td><td>${c.model}</td><td>${officerInput}</td><td>${getSaleTypeBadge(c.sale_type)}</td><td>${getVisitBadge(c.visit_completed)}</td><td>${getLeadBadge(c.customer_type)}</td><td><button class="btn-icon-circle btn-edit" onclick="openCustomerModal('${c.id}')"><i class="fas fa-pen"></i></button></td></tr>`;
+                }).join('');
 
-            // Reset UI state
-            updateDeleteButtonState();
+                updateDeleteButtonState();
+            } finally {
+                hideLoader();
+            }
         }
 
         // --- OFFICER PORTAL ---
         async function loadMyCustomers() {
-            const { data } = await fetchCustomers(); 
-            let myData = data.filter(c => c.officer_id === currentUser.id && c.sale_type === currentOfficerSaleType);
-            
-            // Filters
-            const visitFilter = document.getElementById('my-filter-visit').value;
-            const leadFilter = document.getElementById('my-filter-lead').value;
-            const monthFilter = document.getElementById('my-filter-month').value;
+            showLoader();
+            try {
+                const { data } = await fetchCustomers(); 
+                let myData = data.filter(c => c.officer_id === currentUser.id && c.sale_type === currentOfficerSaleType);
+                
+                const visitFilter = document.getElementById('my-filter-visit').value;
+                const leadFilter = document.getElementById('my-filter-lead').value;
+                const monthFilter = document.getElementById('my-filter-month').value;
 
-            if(visitFilter) myData = myData.filter(c => visitFilter === 'Yes' ? c.visit_completed === 'Yes' : c.visit_completed !== 'Yes');
-            if(leadFilter) myData = myData.filter(c => c.customer_type === leadFilter);
-            
-            // Month Filter with robust date handling
-            if (monthFilter) {
-                myData = myData.filter(c => {
-                    if (!c.date) return false;
-                    // Standard string match
-                    if (String(c.date).startsWith(monthFilter)) return true;
-                    
-                    // Fallback: Parse date
-                    let d;
-                    if (!isNaN(c.date) && c.date > 25569 && c.date < 2958465) {
-                         d = new Date((c.date - 25569) * 86400 * 1000);
-                    } else {
-                         const str = String(c.date);
-                         d = new Date(str.includes('T') ? str : str.replace(/-/g, '\/'));
-                    }
-                    if (isNaN(d.getTime())) return false;
-                    const y = d.getFullYear();
-                    const m = String(d.getMonth() + 1).padStart(2, '0');
-                    return `${y}-${m}` === monthFilter;
-                });
-            }
-
-            // Helper to format Excel serial dates or standard date strings (Added for Officer Portal)
-            const formatDateDisplay = (dateStr) => {
-                if (!dateStr) return '-';
-                let date;
-                if (!isNaN(dateStr) && dateStr > 25569 && dateStr < 2958465) {
-                    date = new Date((dateStr - 25569) * 86400 * 1000);
-                } else {
-                    // Prevent timezone shifting but allow ISO strings
-                    const str = String(dateStr);
-                    date = new Date(str.includes('T') ? str : str.replace(/-/g, '\/'));
+                if(visitFilter) myData = myData.filter(c => visitFilter === 'Yes' ? c.visit_completed === 'Yes' : c.visit_completed !== 'Yes');
+                if(leadFilter) myData = myData.filter(c => c.customer_type === leadFilter);
+                
+                if (monthFilter) {
+                    myData = myData.filter(c => {
+                        if (!c.date) return false;
+                        if (String(c.date).startsWith(monthFilter)) return true;
+                        
+                        let d;
+                        if (!isNaN(c.date) && c.date > 25569 && c.date < 2958465) {
+                            d = new Date((c.date - 25569) * 86400 * 1000);
+                        } else {
+                            const str = String(c.date);
+                            d = new Date(str.includes('T') ? str : str.replace(/-/g, '\/'));
+                        }
+                        if (isNaN(d.getTime())) return false;
+                        const y = d.getFullYear();
+                        const m = String(d.getMonth() + 1).padStart(2, '0');
+                        return `${y}-${m}` === monthFilter;
+                    });
                 }
-                if (isNaN(date.getTime())) return dateStr;
-                const day = String(date.getDate()).padStart(2, '0');
-                const month = date.toLocaleString('default', { month: 'short' });
-                const year = date.getFullYear().toString().slice(-2);
-                return `${day}-${month}-${year}`;
-            };
-            
-            // [SORTING LOGIC START]
-            // Sort by date descending (Latest first)
-            myData.sort((a, b) => {
-                const getTimestamp = (dStr) => {
-                    if (!dStr) return 0;
-                    let d;
-                    if (!isNaN(dStr) && dStr > 25569 && dStr < 2958465) {
-                        d = new Date((dStr - 25569) * 86400 * 1000);
-                    } else {
-                        const str = String(dStr);
-                        d = new Date(str.includes('T') ? str : str.replace(/-/g, '\/'));
-                    }
-                    return isNaN(d.getTime()) ? 0 : d.getTime();
-                };
-                return getTimestamp(b.date) - getTimestamp(a.date);
-            });
-            // [SORTING LOGIC END]
 
-            const stats = { total: myData.length, visited: myData.filter(c=>c.visit_completed==='Yes').length, pending: myData.filter(c=>c.visit_completed!=='Yes').length, hot: myData.filter(c=>c.customer_type==='Hot').length };
-            document.getElementById('my-stats-strip').innerHTML = `<div class="strip-item"><div class="strip-label">Total</div><div class="strip-value">${stats.total}</div></div><div class="strip-item"><div class="strip-label">Visited</div><div class="strip-value text-success">${stats.visited}</div></div><div class="strip-item"><div class="strip-label">Pending</div><div class="strip-value text-warning">${stats.pending}</div></div><div class="strip-item"><div class="strip-label">Hot</div><div class="strip-value text-danger">${stats.hot}</div></div>`;
-            
-            document.getElementById('my-customers-body').innerHTML = myData.map(c => {
-                const isVisited = c.visit_completed === 'Yes';
-                const statusClass = c.customer_type==='Hot' ? 'customer-card-hot' : c.customer_type==='Warm' ? 'customer-card-warm' : 'customer-card-cold';
-                const rowClass = isVisited ? `${statusClass} visited-row` : statusClass;
-                let actionButtons = !isVisited ? `<button class="btn btn-pending-action" onclick="openVisitModal('${c.id}')">⚠️ Complete Visit</button>` : `<div class="action-row" style="width:100%; justify-content:flex-end;"><span style="color:var(--secondary);font-size:1.2rem;margin-right:auto;"><i class="fas fa-check-circle"></i></span>${c.booking_info ? `<div class="status-icon-locked status-booked"><i class="fas fa-bookmark"></i></div>` : `<button class="btn-text-action btn-book-text" onclick="quickUpdate('${c.id}','book')">Book</button>`}${c.delivery_info ? `<div class="status-icon-locked status-delivered"><i class="fas fa-truck"></i></div>` : `<button class="btn-text-action btn-deliver-text" onclick="quickUpdate('${c.id}','deliver')">Deliver</button>`}</div>`;
-                const forwardBtn = `<button class="btn-icon-circle" title="Forward to another officer" onclick="openForwardModal('${c.id}')" style="background:#f2f2f7; color:var(--primary); margin-left:8px;"><i class="fas fa-share-square"></i></button>`;
-                return `<tr class="${rowClass}"><td style="vertical-align:top;">${getPhonePill(c.customer_no)}</td><td style="vertical-align:top;"><div><div style="font-weight:700;font-size:1.05rem;">${c.name}</div><div style="font-size:0.8rem;color:var(--text-muted); margin-bottom:2px;"><i class="far fa-calendar-alt"></i> ${formatDateDisplay(c.date)}</div><div style="font-size:0.85rem;color:var(--text-muted);"><i class="fas fa-map-marker-alt"></i> ${c.address||'-'}</div><div style="margin-top:6px;"><span class="badge" style="background:#f2f2f7;">${c.model}</span></div></div></td><td style="vertical-align:top;"><div><div style="display:flex;gap:6px;margin-bottom:8px;">${getVisitBadge(c.visit_completed)} ${getLeadBadge(c.customer_type)}</div>${c.field_visit_notes ? `<div style="font-size:0.85rem;font-style:italic;">"${c.field_visit_notes}"</div>` : '<span style="color:#ccc;">No notes</span>'}</div></td><td style="vertical-align:top;"><div style="display:flex; align-items:center; width:100%;">${actionButtons}${forwardBtn}</div></td></tr>`;
-            }).join('');
+                const formatDateDisplay = (dateStr) => {
+                    if (!dateStr) return '-';
+                    let date;
+                    if (!isNaN(dateStr) && dateStr > 25569 && dateStr < 2958465) {
+                        date = new Date((dateStr - 25569) * 86400 * 1000);
+                    } else {
+                        const str = String(dateStr);
+                        date = new Date(str.includes('T') ? str : str.replace(/-/g, '\/'));
+                    }
+                    if (isNaN(date.getTime())) return dateStr;
+                    const day = String(date.getDate()).padStart(2, '0');
+                    const month = date.toLocaleString('default', { month: 'short' });
+                    const year = date.getFullYear().toString().slice(-2);
+                    return `${day}-${month}-${year}`;
+                };
+                
+                myData.sort((a, b) => {
+                    const getTimestamp = (dStr) => {
+                        if (!dStr) return 0;
+                        let d;
+                        if (!isNaN(dStr) && dStr > 25569 && dStr < 2958465) {
+                            d = new Date((dStr - 25569) * 86400 * 1000);
+                        } else {
+                            const str = String(dStr);
+                            d = new Date(str.includes('T') ? str : str.replace(/-/g, '\/'));
+                        }
+                        return isNaN(d.getTime()) ? 0 : d.getTime();
+                    };
+                    return getTimestamp(b.date) - getTimestamp(a.date);
+                });
+
+                const stats = { total: myData.length, visited: myData.filter(c=>c.visit_completed==='Yes').length, pending: myData.filter(c=>c.visit_completed!=='Yes').length, hot: myData.filter(c=>c.customer_type==='Hot').length };
+                document.getElementById('my-stats-strip').innerHTML = `<div class="strip-item"><div class="strip-label">Total</div><div class="strip-value">${stats.total}</div></div><div class="strip-item"><div class="strip-label">Visited</div><div class="strip-value text-success">${stats.visited}</div></div><div class="strip-item"><div class="strip-label">Pending</div><div class="strip-value text-warning">${stats.pending}</div></div><div class="strip-item"><div class="strip-label">Hot</div><div class="strip-value text-danger">${stats.hot}</div></div>`;
+                
+                document.getElementById('my-customers-body').innerHTML = myData.map(c => {
+                    const isVisited = c.visit_completed === 'Yes';
+                    const statusClass = c.customer_type==='Hot' ? 'customer-card-hot' : c.customer_type==='Warm' ? 'customer-card-warm' : 'customer-card-cold';
+                    const rowClass = isVisited ? `${statusClass} visited-row` : statusClass;
+                    let actionButtons = !isVisited ? `<button class="btn btn-pending-action" onclick="openVisitModal('${c.id}')">⚠️ Complete Visit</button>` : `<div class="action-row" style="width:100%; justify-content:flex-end;"><span style="color:var(--secondary);font-size:1.2rem;margin-right:auto;"><i class="fas fa-check-circle"></i></span>${c.booking_info ? `<div class="status-icon-locked status-booked"><i class="fas fa-bookmark"></i></div>` : `<button class="btn-text-action btn-book-text" onclick="quickUpdate('${c.id}','book')">Book</button>`}${c.delivery_info ? `<div class="status-icon-locked status-delivered"><i class="fas fa-truck"></i></div>` : `<button class="btn-text-action btn-deliver-text" onclick="quickUpdate('${c.id}','deliver')">Deliver</button>`}</div>`;
+                    const forwardBtn = `<button class="btn-icon-circle" title="Forward to another officer" onclick="openForwardModal('${c.id}')" style="background:#f2f2f7; color:var(--primary); margin-left:8px;"><i class="fas fa-share-square"></i></button>`;
+                    return `<tr class="${rowClass}"><td style="vertical-align:top;">${getPhonePill(c.customer_no)}</td><td style="vertical-align:top;"><div><div style="font-weight:700;font-size:1.05rem;">${c.name}</div><div style="font-size:0.8rem;color:var(--text-muted); margin-bottom:2px;"><i class="far fa-calendar-alt"></i> ${formatDateDisplay(c.date)}</div><div style="font-size:0.85rem;color:var(--text-muted);"><i class="fas fa-map-marker-alt"></i> ${c.address||'-'}</div><div style="margin-top:6px;"><span class="badge" style="background:#f2f2f7;">${c.model}</span></div></div></td><td style="vertical-align:top;"><div><div style="display:flex;gap:6px;margin-bottom:8px;">${getVisitBadge(c.visit_completed)} ${getLeadBadge(c.customer_type)}</div>${c.field_visit_notes ? `<div style="font-size:0.85rem;font-style:italic;">"${c.field_visit_notes}"</div>` : '<span style="color:#ccc;">No notes</span>'}</div></td><td style="vertical-align:top;"><div style="display:flex; align-items:center; width:100%;">${actionButtons}${forwardBtn}</div></td></tr>`;
+                }).join('');
+            } finally {
+                hideLoader();
+            }
         }
 
         async function loadOfficers() {
-            const { data } = await fetchOfficers(); const myOfficers = data.filter(o => o.role === 'officer' && (!o.business || o.business === currentBusiness));
-            document.getElementById('officers-body').innerHTML = myOfficers.map(o => `
-            <tr>
-                <td><input type="checkbox" class="officer-checkbox" value="${o.id}" onchange="updateOfficerDeleteButtonState()"></td>
-                <td>${o.full_name}</td>
-                <td>${o.territory}</td>
-                <td><span class="badge badge-success">${o.role}</span></td>
-                <td><div class="action-row"><button class="btn-icon-circle btn-edit" onclick="openOfficerModal('${o.id}')"><i class="fas fa-pen"></i></button><button class="btn-icon-circle btn-delete" onclick="deleteOfficer('${o.id}')"><i class="fas fa-trash"></i></button></div></td>
-            </tr>`).join('');
-            
-            // Reset delete button state
-            updateOfficerDeleteButtonState();
+            showLoader();
+            try {
+                const { data } = await fetchOfficers(); 
+                const myOfficers = data.filter(o => o.role === 'officer' && (!o.business || o.business === currentBusiness));
+                document.getElementById('officers-body').innerHTML = myOfficers.map(o => `
+                <tr>
+                    <td><input type="checkbox" class="officer-checkbox" value="${o.id}" onchange="updateOfficerDeleteButtonState()"></td>
+                    <td>${o.full_name}</td>
+                    <td>${o.territory}</td>
+                    <td><span class="badge badge-success">${o.role}</span></td>
+                    <td><div class="action-row"><button class="btn-icon-circle btn-edit" onclick="openOfficerModal('${o.id}')"><i class="fas fa-pen"></i></button><button class="btn-icon-circle btn-delete" onclick="deleteOfficer('${o.id}')"><i class="fas fa-trash"></i></button></div></td>
+                </tr>`).join('');
+                
+                updateOfficerDeleteButtonState();
 
-            if(currentUser.role==='admin') { 
-                document.getElementById('sub-admin-section').classList.remove('hidden'); 
-                document.getElementById('admins-body').innerHTML = data.filter(o=>o.role.includes('admin') && o.role !== 'admin').map(a => `<tr><td><strong>${a.full_name}</strong></td><td><span class="badge badge-purple">${a.role}</span></td><td><code>${a.password}</code></td><td><button class="btn-icon-circle btn-delete" onclick="deleteAdmin('${a.id}')"><i class="fas fa-trash"></i></button></td></tr>`).join(''); 
+                if(currentUser.role==='admin') { 
+                    document.getElementById('sub-admin-section').classList.remove('hidden'); 
+                    document.getElementById('admins-body').innerHTML = data.filter(o=>o.role.includes('admin') && o.role !== 'admin').map(a => `<tr><td><strong>${a.full_name}</strong></td><td><span class="badge badge-purple">${a.role}</span></td><td><code>${a.password}</code></td><td><button class="btn-icon-circle btn-delete" onclick="deleteAdmin('${a.id}')"><i class="fas fa-trash"></i></button></td></tr>`).join(''); 
+                }
+            } finally {
+                hideLoader();
             }
         }
 
         async function loadOfficersForDropdown() {
-            const { data } = await fetchOfficers(); allOfficers = data;
+            const { data } = await fetchOfficers();
             const filtered = data.filter(o => o.role === 'officer' && (!o.business || o.business === currentBusiness));
             
-            // Modal Dropdown
             const modalDrop = document.getElementById('customer-officer');
             modalDrop.innerHTML = '<option value="">-- Select --</option>';
             filtered.forEach(o => modalDrop.add(new Option(o.full_name, o.id)));
 
-            // Filter Dropdown
             const filterDrop = document.getElementById('filter-officer');
             filterDrop.innerHTML = '<option value="">All Officers</option><option value="Unassigned">⚠️ Unassigned</option>';
             filtered.forEach(o => filterDrop.add(new Option(o.full_name, o.id)));
@@ -1125,19 +1055,26 @@
         window.handleOfficerAssignmentChange = async function(cid, input) {
             const val = input.value.trim();
             const officer = allOfficers.find(o => `${o.full_name} (${o.territory})` === val);
-            const data = await apiCall(`/customers?business=${encodeURIComponent(currentBusiness)}`) || MOCK_DATA.customers;
-            const c = data.find(x => x.id === cid);
+            
+            const c = currentCustomersList.find(x => x.id === cid);
             if(c) {
-                const offId = officer ? officer.id : null;
-                const offName = officer ? officer.full_name : null;
-                // API Update
-                await apiCall('/customers', 'POST', { ...c, officer_id: offId, officer_name: offName });
-                // Local Fallback
-                const localC = MOCK_DATA.customers.find(x => x.id === cid);
-                if(localC) { localC.officer_id = offId; localC.officer_name = offName; saveDataToStorage(); }
-                
-                showToast('Officer Assigned', 'success');
-                if(officer) input.classList.remove('unassigned'); else input.classList.add('unassigned');
+                showLoader();
+                try {
+                    const offId = officer ? officer.id : null;
+                    const offName = officer ? officer.full_name : null;
+                    
+                    await apiCall('/customers', 'POST', { ...c, officer_id: offId, officer_name: offName });
+                    
+                    showToast('Officer Assigned', 'success');
+                    if(officer) input.classList.remove('unassigned'); else input.classList.add('unassigned');
+                    
+                    // Refresh data
+                    loadCustomersData();
+                } catch(e) {
+                    showToast('Failed to assign', 'error');
+                } finally {
+                    hideLoader();
+                }
             }
         };
 
@@ -1155,21 +1092,18 @@
         async function handleSaveCustomer(e) {
             e.preventDefault(); 
             
-            // Validate Phone with Creative Auto-Fix
             const phoneInput = document.getElementById('customer-no');
-            let phoneNo = phoneInput.value.replace(/\D/g, ''); // Ensure only numbers
+            let phoneNo = phoneInput.value.replace(/\D/g, ''); 
 
-            // Logic: If user typed 10 digits starting with 1 (e.g. 1712345678), assume they missed the leading 0
             if (phoneNo.length === 10 && /^1[3-9]/.test(phoneNo)) {
                 phoneNo = '0' + phoneNo;
-                phoneInput.value = phoneNo; // Visual feedback: Update the input to show the full number
-                showToast('Auto-corrected number format (added leading 0)', 'info'); // Friendly notification
+                phoneInput.value = phoneNo; 
+                showToast('Auto-corrected number format (added leading 0)', 'info'); 
             }
 
             if (!/^01[3-9]\d{8}$/.test(phoneNo)) {
                 showToast('Invalid BD Phone Number! Must be 11 digits (01...) or 10 digits (1...).', 'error');
                 phoneInput.focus();
-                // Add shake effect
                 phoneInput.style.animation = 'shake 0.3s';
                 setTimeout(()=> phoneInput.style.animation='', 300);
                 return;
@@ -1178,34 +1112,49 @@
             showLoader();
             try {
                 const id = document.getElementById('customer-id').value; const officerSelect = document.getElementById('customer-officer');
-                // Use the updated phoneNo variable here
                 const data = { id: id || "cust-"+Date.now(), customer_no: phoneNo, name: document.getElementById('customer-name').value, date: document.getElementById('customer-date').value, address: document.getElementById('customer-address').value, model: document.getElementById('customer-model').value, sale_type: document.getElementById('customer-sale-type').value, officer_id: officerSelect.value, officer_name: officerSelect.options[officerSelect.selectedIndex]?.text || 'Unassigned', business: currentBusiness };
+                
                 await apiCall('/customers', 'POST', data);
-                
-                // Local fallback
-                if(id) { const c = MOCK_DATA.customers.find(x=>x.id===id); Object.assign(c, data); } else { MOCK_DATA.customers.unshift(data); }
-                saveDataToStorage();
-                
-                showToast('Saved', 'success'); closeCustomerModal(); loadCustomersData();
+                showToast('Saved', 'success'); 
+                closeCustomerModal(); 
+                loadCustomersData();
+            } catch(e) {
+                showToast('Save Failed', 'error');
             } finally {
                 hideLoader();
             }
         }
 
-        function openOfficerModal(id) { document.getElementById('officer-modal').classList.remove('hidden'); document.getElementById('officer-form').reset(); document.getElementById('officer-id').value = id || ''; if(id){ const o = MOCK_DATA.officers.find(x=>x.id===id); if(o){ document.getElementById('officer-name').value=o.full_name; document.getElementById('officer-territory').value=o.territory; document.getElementById('officer-form-password').value=o.password; } document.getElementById('officer-modal-title').textContent="Edit Officer"; } else { document.getElementById('officer-modal-title').textContent="Create Officer"; } }
+        function openOfficerModal(id) { 
+            document.getElementById('officer-modal').classList.remove('hidden'); 
+            document.getElementById('officer-form').reset(); 
+            document.getElementById('officer-id').value = id || ''; 
+            if(id) { 
+                const o = allOfficers.find(x=>x.id===id); 
+                if(o){ 
+                    document.getElementById('officer-name').value=o.full_name; 
+                    document.getElementById('officer-territory').value=o.territory; 
+                    document.getElementById('officer-form-password').value=o.password; 
+                } 
+                document.getElementById('officer-modal-title').textContent="Edit Officer"; 
+            } else { 
+                document.getElementById('officer-modal-title').textContent="Create Officer"; 
+            } 
+        }
         function closeOfficerModal() { document.getElementById('officer-modal').classList.add('hidden'); }
         async function handleSaveOfficer(e) {
             e.preventDefault(); 
             showLoader();
             try {
-                const id = document.getElementById('officer-id').value; const data = { id: id || "off-"+Date.now(), full_name: document.getElementById('officer-name').value, territory: document.getElementById('officer-territory').value, password: document.getElementById('officer-form-password').value, role: 'officer', business: currentBusiness };
+                const id = document.getElementById('officer-id').value; 
+                const data = { id: id || "off-"+Date.now(), full_name: document.getElementById('officer-name').value, territory: document.getElementById('officer-territory').value, password: document.getElementById('officer-form-password').value, role: 'officer', business: currentBusiness };
+                
                 await apiCall('/officers', 'POST', data);
-                
-                // Local fallback
-                if(id && !id.startsWith("off-")) { const i = MOCK_DATA.officers.findIndex(x=>x.id===id); MOCK_DATA.officers[i] = {...MOCK_DATA.officers[i], ...data}; } else { MOCK_DATA.officers.push(data); }
-                saveDataToStorage();
-                
-                closeOfficerModal(); loadOfficers(); showToast('Saved', 'success');
+                closeOfficerModal(); 
+                loadOfficers(); 
+                showToast('Saved', 'success');
+            } catch(e) {
+                showToast('Failed to save officer', 'error');
             } finally {
                 hideLoader();
             }
@@ -1215,8 +1164,7 @@
             document.getElementById('visit-modal').classList.remove('hidden'); 
             document.getElementById('visit-customer-id').value = id; 
             
-            // Optional: Pre-fill existing data if found locally
-            const c = MOCK_DATA.customers.find(x => x.id == id);
+            const c = currentCustomersList.find(x => x.id == id);
             if(c) {
                 document.getElementById('visit-completed').value = c.visit_completed || 'No';
                 document.getElementById('visit-rating').value = c.customer_type || 'Warm';
@@ -1236,42 +1184,31 @@
                 return;
             }
             
-            // 1. Gather form data
-            const updates = { 
-                id: id, // Ensure ID is part of updates
-                visit_completed: document.getElementById('visit-completed').value, 
-                customer_type: document.getElementById('visit-rating').value, 
-                field_visit_notes: notes 
-            };
+            const c = currentCustomersList.find(x => x.id == id);
+            if (!c) return showToast('Customer not found', 'error');
 
-            // 2. Local Update (Immediate Source of Truth for UI)
-            const localC = MOCK_DATA.customers.find(x => x.id == id);
-            if (localC) {
-                Object.assign(localC, updates);
-                saveDataToStorage(); // Persist local change
-            }
-
-            // 3. Server Sync (Background)
-            // REMOVED LOADER FROM HERE
+            showLoader();
             try {
-                // If we are in server mode, this sends the data. 
-                // We send the FULL object (preferred) or at least the updates with ID
-                await apiCall('/customers', 'POST', localC || updates);
-                
+                const updates = { 
+                    ...c,
+                    visit_completed: document.getElementById('visit-completed').value, 
+                    customer_type: document.getElementById('visit-rating').value, 
+                    field_visit_notes: notes 
+                };
+
+                await apiCall('/customers', 'POST', updates);
                 showToast('Visit Updated', 'success'); 
                 closeVisitModal(); 
-                
-                // 4. Reload UI
-                // Important: If we are in local mode, loadMyCustomers will use the MOCK_DATA we just updated.
                 await loadMyCustomers();
             } catch (error) {
-                console.error(error);
                 showToast('Update failed', 'error');
-            } 
+            } finally {
+                hideLoader();
+            }
         }
 
         function openForwardModal(customerId) {
-            const customer = MOCK_DATA.customers.find(c => c.id === customerId); if (!customer) return;
+            const customer = currentCustomersList.find(c => c.id === customerId); if (!customer) return;
             document.getElementById('forward-customer-id').value = customerId;
             const select = document.getElementById('forward-officer-select'); select.innerHTML = '<option value="">Select Officer</option>';
             const availableOfficers = allOfficers.filter(o => o.role === 'officer' && (!o.business || o.business === currentBusiness) && o.id !== currentUser.id);
@@ -1279,20 +1216,26 @@
             document.getElementById('forward-modal').classList.remove('hidden');
         }
         function closeForwardModal() { document.getElementById('forward-modal').classList.add('hidden'); }
+        
         document.getElementById('forward-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const cid = document.getElementById('forward-customer-id').value;
             const newOfficerId = document.getElementById('forward-officer-select').value;
             const newOfficerName = document.getElementById('forward-officer-select').selectedOptions[0].text.split(' (')[0];
             
-            const data = await apiCall(`/customers?business=${encodeURIComponent(currentBusiness)}`) || MOCK_DATA.customers;
-            const c = data.find(x => x.id === cid);
+            const c = currentCustomersList.find(x => x.id === cid);
             if(c) {
-                await apiCall('/customers', 'POST', { ...c, officer_id: newOfficerId, officer_name: newOfficerName });
-                // Local fallback
-                const localC = MOCK_DATA.customers.find(x => x.id === cid); if(localC) { localC.officer_id = newOfficerId; localC.officer_name = newOfficerName; saveDataToStorage(); }
-                
-                showToast('Forwarded', 'success'); closeForwardModal(); loadMyCustomers();
+                showLoader();
+                try {
+                    await apiCall('/customers', 'POST', { ...c, officer_id: newOfficerId, officer_name: newOfficerName });
+                    showToast('Forwarded', 'success'); 
+                    closeForwardModal(); 
+                    loadMyCustomers();
+                } catch(e) {
+                    showToast('Failed to forward', 'error');
+                } finally {
+                    hideLoader();
+                }
             }
         });
 
@@ -1300,26 +1243,32 @@
             document.getElementById('confirm-title').textContent = type === 'book' ? 'Mark as Booked' : 'Mark as Delivered';
             document.getElementById('confirm-msg').textContent = `Are you sure you want to update this status?`;
             confirmCallback = async () => {
-                const data = await apiCall(`/customers?business=${encodeURIComponent(currentBusiness)}`) || MOCK_DATA.customers;
-                const c = data.find(x => x.id == id);
-                const updates = { ...c };
-                if(type==='book') updates.booking_info='Booked';
-                if(type==='deliver') updates.delivery_info='Delivered';
+                const c = currentCustomersList.find(x => x.id == id);
+                if (!c) return;
                 
-                await apiCall('/customers', 'POST', updates);
-                // Local fallback
-                const localC = MOCK_DATA.customers.find(x => x.id == id); Object.assign(localC, updates); saveDataToStorage();
-                
-                loadMyCustomers(); showToast(type+'ed', 'success');
+                showLoader();
+                try {
+                    const updates = { ...c };
+                    if(type==='book') updates.booking_info='Booked';
+                    if(type==='deliver') updates.delivery_info='Delivered';
+                    
+                    await apiCall('/customers', 'POST', updates);
+                    loadMyCustomers(); 
+                    showToast(type+'ed', 'success');
+                } catch(e) {
+                    showToast('Failed to update', 'error');
+                } finally {
+                    hideLoader();
+                }
             };
             document.getElementById('confirm-modal').classList.remove('hidden');
         }
 
         // --- ADMIN & IMPORT ---
         function openSuperAdminAuth() { document.getElementById('super-admin-auth-modal').classList.remove('hidden'); document.getElementById('sa-password').value=''; }
-        function verifySuperAdmin() { 
+        
+        async function verifySuperAdmin() { 
             const input = document.getElementById('sa-password').value;
-            // Simple string check as requested for "Sh@4321"
             if(input === 'Sh@4321'){ 
                 isSuperAdminVerification = true;
                 document.getElementById('super-admin-auth-modal').classList.add('hidden'); 
@@ -1329,10 +1278,16 @@
             }
         }
 
-        function openManagePortfolios() { 
-            if(!isSuperAdminVerification) return; // Security Check
-            document.getElementById('manage-portfolio-modal').classList.remove('hidden'); 
-            renderPortfolioList();
+        async function openManagePortfolios() { 
+            if(!isSuperAdminVerification) return; 
+            showLoader();
+            try {
+                await fetchOfficers(); // Refresh global officers cache for Admin checks
+                document.getElementById('manage-portfolio-modal').classList.remove('hidden'); 
+                renderPortfolioList();
+            } finally {
+                hideLoader();
+            }
         }
 
         function renderPortfolioList() {
@@ -1343,8 +1298,7 @@
                 const id = b.replace(/\s/g, '-');
                 const iconClass = businessIcons[b] || defaultIcons[b] || 'fa-briefcase';
                 
-                // Check if admin exists for this portfolio
-                const adminUser = MOCK_DATA.officers.find(o => o.role.includes('admin') && o.business === b);
+                const adminUser = allOfficers.find(o => o.role.includes('admin') && o.business === b);
                 const hasSpecificAdmin = !!adminUser;
                 const currentPass = adminUser ? adminUser.password : '';
                 
@@ -1354,7 +1308,6 @@
 
                 return `
                 <div class="sa-list-row" id="row-${id}" style="flex-direction: column; align-items: stretch; border-left: 3px solid transparent; transition: all 0.2s;">
-                    
                     <!-- View Row -->
                     <div id="view-${id}" style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
                         <div style="display: flex; align-items: center;">
@@ -1375,7 +1328,7 @@
                         </div>
                     </div>
 
-                    <!-- Edit Panel (Creative UI) -->
+                    <!-- Edit Panel -->
                     <div id="edit-${id}" style="display: none; margin-top: 12px; background: #fff; border: 1px solid #E5E7EB; border-radius: 12px; padding: 16px; box-shadow: 0 4px 20px rgba(0,0,0,0.05); position: relative; overflow: hidden;">
                         <div style="position: absolute; top: 0; left: 0; width: 4px; height: 100%; background: var(--primary);"></div>
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-left: 8px;">
@@ -1399,7 +1352,6 @@
                             </div>
                         </div>
                     </div>
-
                 </div>
                 `;
             }).join(''); 
@@ -1412,13 +1364,11 @@
             const rowEl = document.getElementById(`row-${id}`);
             
             if (show) {
-                // Close other open edits first (optional, but cleaner)
                 document.querySelectorAll('[id^="edit-"]').forEach(el => el.style.display = 'none');
                 document.querySelectorAll('[id^="view-"]').forEach(el => el.style.display = 'flex');
                 
                 viewEl.style.display = 'none';
                 editEl.style.display = 'block';
-                // Animation effect
                 editEl.style.animation = 'slideUp 0.2s ease-out';
                 rowEl.style.backgroundColor = '#fff';
             } else {
@@ -1435,82 +1385,99 @@
             
             if (!newName) return showToast('Portfolio name cannot be empty', 'error');
 
-            // 1. Handle Rename Logic if changed
-            if (newName !== oldName) {
-                const idx = businessList.indexOf(oldName);
-                if (idx !== -1) businessList[idx] = newName;
-                
-                if (businessIcons[oldName]) {
-                    businessIcons[newName] = businessIcons[oldName];
-                    delete businessIcons[oldName];
+            showLoader();
+            try {
+                // If the name changed, we push the new one and delete the old one
+                // NOTE: Proper cascading requires DB backend changes. This creates a new business in the DB.
+                if (newName !== oldName) {
+                    const icon = businessIcons[oldName] || 'fa-briefcase';
+                    await apiCall('/businesses', 'POST', { name: newName, icon: icon });
+                    await apiCall(`/businesses/${encodeURIComponent(oldName)}`, 'DELETE');
+                    
+                    const idx = businessList.indexOf(oldName);
+                    if (idx !== -1) businessList[idx] = newName;
+                    
+                    if (businessIcons[oldName]) {
+                        businessIcons[newName] = businessIcons[oldName];
+                        delete businessIcons[oldName];
+                    }
                 }
-                
-                MOCK_DATA.officers.forEach(o => { if (o.business === oldName) o.business = newName; });
-                MOCK_DATA.customers.forEach(c => { if (c.business === oldName) c.business = newName; });
-            }
 
-            // 2. Handle Password Logic
-            if (newPass) {
-                // Look for admin using new name (in case it changed) or old name logic
-                const targetBusiness = newName; // We are saving to the NEW business name context
-                let admin = MOCK_DATA.officers.find(o => o.role.includes('admin') && o.business === targetBusiness);
-                
-                if (admin) {
-                    admin.password = newPass;
-                    await apiCall('/officers', 'POST', admin);
-                } else {
-                    const newAdmin = {
-                        id: "adm-" + Date.now() + Math.random(),
-                        full_name: "admin",
-                        territory: "Head Office",
-                        password: newPass,
-                        role: "admin",
-                        business: targetBusiness
-                    };
-                    MOCK_DATA.officers.push(newAdmin);
-                    await apiCall('/officers', 'POST', newAdmin);
+                // Handling new Admin / Admin password
+                if (newPass) {
+                    const targetBusiness = newName; 
+                    let admin = allOfficers.find(o => o.role.includes('admin') && o.business === targetBusiness);
+                    
+                    if (admin) {
+                        admin.password = newPass;
+                        await apiCall('/officers', 'POST', admin);
+                    } else {
+                        const newAdmin = {
+                            id: "adm-" + Date.now() + Math.random(),
+                            full_name: "admin",
+                            territory: "Head Office",
+                            password: newPass,
+                            role: "admin",
+                            business: targetBusiness
+                        };
+                        await apiCall('/officers', 'POST', newAdmin);
+                    }
                 }
-            }
 
-            saveDataToStorage();
-            renderPortfolioList();
-            renderLandingPage(); 
-            showToast('Configuration Updated', 'success');
+                await fetchOfficers(); 
+                renderPortfolioList();
+                renderLandingPage(); 
+                showToast('Configuration Updated', 'success');
+            } catch(e) {
+                showToast('Failed to update config', 'error');
+            } finally {
+                hideLoader();
+            }
         }
 
         async function addNewPortfolio() { 
-            if(!isSuperAdminVerification) return; // Security Check
+            if(!isSuperAdminVerification) return; 
             const n = document.getElementById('new-portfolio-name').value.trim(); 
             const icon = document.getElementById('new-portfolio-icon').value;
             if(n && !businessList.includes(n)) { 
-                await apiCall('/businesses', 'POST', { name: n, icon: icon });
-                businessList.push(n); businessIcons[n] = icon; saveDataToStorage(); 
-                openManagePortfolios(); renderLandingPage(); showToast('Added','success'); 
+                showLoader();
+                try {
+                    await apiCall('/businesses', 'POST', { name: n, icon: icon });
+                    businessList.push(n); businessIcons[n] = icon; 
+                    openManagePortfolios(); renderLandingPage(); showToast('Added','success'); 
+                } catch(e) {
+                    showToast('Failed to add portfolio', 'error');
+                } finally {
+                    hideLoader();
+                }
             } 
         }
 
         window.deletePortfolio = async (n) => { 
-            if(!isSuperAdminVerification) return; // Security Check
+            if(!isSuperAdminVerification) return; 
             
-            // Secure Delete: Type name to confirm
             const confirmName = prompt("To delete '" + n + "', please type the portfolio name below:");
-            
             if (confirmName !== n) {
                 if (confirmName !== null) showToast("Name mismatch, deletion cancelled", "error");
                 return;
             }
 
-            // EXTRA SECURITY LAYER: Password Confirmation
             const confirmPass = prompt("Security Check: Enter Super Admin Password to confirm deletion:");
-            if (!confirmPass) return; // User cancelled
+            if (!confirmPass) return; 
 
             if (confirmPass === 'Sh@4321') {
-                await apiCall(`/businesses/${encodeURIComponent(n)}`, 'DELETE');
-                businessList=businessList.filter(b=>b!==n); 
-                saveDataToStorage(); 
-                openManagePortfolios(); 
-                renderLandingPage(); 
-                showToast('Deleted', 'success');
+                showLoader();
+                try {
+                    await apiCall(`/businesses/${encodeURIComponent(n)}`, 'DELETE');
+                    businessList=businessList.filter(b=>b!==n); 
+                    openManagePortfolios(); 
+                    renderLandingPage(); 
+                    showToast('Deleted', 'success');
+                } catch(e) {
+                    showToast('Failed to delete', 'error');
+                } finally {
+                    hideLoader();
+                }
             } else {
                 showToast("Invalid Password, deletion cancelled", "error");
             }
@@ -1531,19 +1498,22 @@
                     business: currentBusiness
                 };
                 await apiCall('/officers', 'POST', data);
-                MOCK_DATA.officers.push(data); saveDataToStorage(); 
                 showToast('Admin Created', 'success'); closeAdminModal(); loadOfficers();
+            } catch(e) {
+                showToast('Failed to create admin', 'error');
             } finally {
                 hideLoader();
             }
         });
+        
         window.deleteAdmin = async function(id) {
             if(confirm('Delete this admin?')) {
                 showLoader();
                 try {
                     await apiCall(`/officers/${id}`, 'DELETE');
-                    MOCK_DATA.officers = MOCK_DATA.officers.filter(o => o.id !== id); saveDataToStorage(); 
                     loadOfficers(); showToast('Deleted', 'success');
+                } catch(e) {
+                    showToast('Failed to delete', 'error');
                 } finally {
                     hideLoader();
                 }
@@ -1573,7 +1543,7 @@
             
             const reader = new FileReader();
             reader.onload = async function(e) {
-                showLoader(); // Enable this
+                showLoader(); 
                 try {
                     const lines = e.target.result.split("\n");
                     let count = 0;
@@ -1587,11 +1557,10 @@
                             const empId = cols[6] || ""; 
                             let offId = null; let offName = 'Unassigned';
                             if (empId) {
-                                const found = MOCK_DATA.officers.find(o => o.password === empId && (o.business === currentBusiness || !o.business));
+                                const found = allOfficers.find(o => o.password === empId && (o.business === currentBusiness || !o.business));
                                 if(found) { offId=found.id; offName=found.full_name; }
                             }
                             
-                            // --- CREATIVE DATE PARSING LOGIC ---
                             let rawDate = cols[2];
                             let parsedDate = rawDate;
                             if (rawDate) {
@@ -1609,27 +1578,26 @@
                                     parsedDate = `${yyyy}-${mm}-${dd}`;
                                 }
                             }
-                            // -----------------------------------
 
                             const c = { id: "cust-" + Date.now() + Math.random(), customer_no: cols[0], name: cols[1], date: parsedDate, address: cols[3], model: cols[4], sale_type: cols[5], officer_id: offId, officer_name: offName, business: currentBusiness, visit_completed: 'No' };
                             await apiCall('/customers', 'POST', c);
-                            MOCK_DATA.customers.unshift(c); count++;
+                            count++;
                         } else if (type === 'officer' && cols.length >= 3) {
-                             const empId = cols[2]; // Password serves as Employee ID
+                             const empId = cols[2]; 
                              
-                             // Check for duplicates based on Employee ID (password)
-                             const isDuplicate = MOCK_DATA.officers.some(o => o.password === empId);
+                             // Server validation replaces MOCK_DATA finding duplicates.
+                             // We assume API upsert handles conflict gracefully, but counting skips requires a pre-fetch.
+                             const isDuplicate = allOfficers.some(o => o.password === empId);
 
                              if (!isDuplicate) {
                                  const o = { id: "off-" + Date.now() + Math.random(), full_name: cols[0], territory: cols[1], password: empId, role: 'officer', business: currentBusiness };
                                  await apiCall('/officers', 'POST', o);
-                                 MOCK_DATA.officers.push(o); count++;
+                                 count++;
                              } else {
                                  skipped++;
                              }
                         }
                     }
-                    saveDataToStorage();
                     
                     if (type === 'customer') {
                         showToast(`🎉 Success! ${count} customers imported perfectly!`, "success");
@@ -1643,8 +1611,10 @@
 
                     if(type === 'customer') { closeBulkImportModal(); loadCustomersData(); } else { closeBulkImportOfficerModal(); loadOfficers(); }
                     fileInput.value = '';
+                } catch (error) {
+                    showToast('Import encountered an error', 'error');
                 } finally {
-                    hideLoader(); // Enable this
+                    hideLoader();
                 }
             };
             reader.readAsText(file, 'UTF-8');
@@ -1664,48 +1634,41 @@
             document.getElementById('add-officer-btn').addEventListener('click', () => openOfficerModal()); 
             document.getElementById('import-officer-btn').addEventListener('click', () => document.getElementById('bulk-import-officer-modal').classList.remove('hidden')); 
             document.getElementById('add-customer-btn').addEventListener('click', () => openCustomerModal());
-            document.getElementById('delete-selected-btn').addEventListener('click', deleteSelectedCustomers); // Added listener
-            document.getElementById('delete-selected-officers-btn').addEventListener('click', deleteSelectedOfficers); // New Officer Bulk Delete
+            document.getElementById('delete-selected-btn').addEventListener('click', deleteSelectedCustomers); 
+            document.getElementById('delete-selected-officers-btn').addEventListener('click', deleteSelectedOfficers); 
             document.getElementById('bulk-import-btn').addEventListener('click', () => document.getElementById('bulk-import-modal').classList.remove('hidden')); document.getElementById('export-csv-btn').addEventListener('click', exportToCSV);
             document.getElementById('confirm-yes-btn').addEventListener('click', () => { if(confirmCallback) confirmCallback(); closeConfirmModal(); });
             
             ['filter-sale-type','filter-officer','filter-visit','filter-lead-type'].forEach(id => document.getElementById(id).addEventListener('change', loadCustomersData));
             ['my-filter-visit','my-filter-lead','my-filter-month'].forEach(id => document.getElementById(id).addEventListener('change', loadMyCustomers));
-            document.getElementById('dashboard-filter-month').addEventListener('change', loadDashboardData); // Dashboard Month Filter
+            document.getElementById('dashboard-filter-month').addEventListener('change', loadDashboardData); 
             document.querySelectorAll('.sale-type-btn').forEach(b => b.addEventListener('click', e => { document.querySelectorAll('.sale-type-btn').forEach(x => x.classList.remove('active')); e.target.classList.add('active'); currentSaleType = e.target.dataset.type; loadDashboardData(); }));
             document.querySelectorAll('.officer-sale-type-btn').forEach(b => b.addEventListener('click', e => { document.querySelectorAll('.officer-sale-type-btn').forEach(x => x.classList.remove('active')); e.target.classList.add('active'); currentOfficerSaleType = e.target.dataset.type; loadMyCustomers(); }));
 
-            // Creative Phone Validation
             const phoneInput = document.getElementById('customer-no');
             phoneInput.addEventListener('input', (e) => {
-                // Enforce numbers only
                 let val = e.target.value.replace(/\D/g, '');
                 
-                // Creative Logic: Visualize progress
-                // Accept 11 digits (01...) OR 10 digits (1...) as valid entry states
                 const isValidStandard = val.length === 11 && /^01[3-9]/.test(val);
                 const isValidShort = val.length === 10 && /^1[3-9]/.test(val);
 
                 if (isValidStandard || isValidShort) {
-                    // Success State
                     e.target.style.borderColor = 'var(--secondary)';
                     e.target.style.boxShadow = '0 0 0 3px rgba(52, 199, 89, 0.1)';
                     e.target.style.background = 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 512 512\' fill=\'%2334C759\'%3E%3Cpath d=\'M173.898 439.404l-166.4-166.4c-9.997-9.997-9.997-26.206 0-36.204l36.203-36.204c9.997-9.998 26.207-9.998 36.204 0L192 312.69 432.095 72.596c9.997-9.997 26.207-9.997 36.204 0l36.203 36.204c9.997 9.997 9.997 26.206 0 36.204l-294.4 294.401c-9.998 9.997-26.207 9.997-36.204-.001z\'/%3E%3C/svg%3E") no-repeat right 10px center/15px, white';
                 } else {
-                    // Error/Typing State
                     e.target.style.background = 'white';
                     
-                    // Allow starting with 01... or 1...
                     const isValidPrefix = /^01/.test(val) || /^1/.test(val) || val === '0';
                     const isTooLong = val.length > 11;
 
                     if (val.length > 0 && (!isValidPrefix || isTooLong)) {
-                         e.target.style.borderColor = 'var(--danger)'; // Wrong prefix
+                         e.target.style.borderColor = 'var(--danger)'; 
                     } else if (val.length > 0) {
-                         e.target.style.borderColor = 'var(--warning)'; // Typing...
+                         e.target.style.borderColor = 'var(--warning)'; 
                          e.target.style.boxShadow = 'none';
                     } else {
-                         e.target.style.borderColor = '#e5e5ea'; // Default
+                         e.target.style.borderColor = '#e5e5ea'; 
                          e.target.style.boxShadow = 'none';
                     }
                 }
@@ -1714,5 +1677,4 @@
         }
     </script>
 </body>
-
 </html>

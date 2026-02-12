@@ -851,7 +851,7 @@
                     if (!isNaN(c.date) && c.date > 25569 && c.date < 2958465) {
                          d = new Date((c.date - 25569) * 86400 * 1000);
                     } else {
-                         d = new Date(c.date);
+                         d = new Date(String(c.date).replace(/-/g, '\/'));
                     }
                     
                     if (isNaN(d.getTime())) return false;
@@ -957,12 +957,13 @@
                     // Excel base date: Dec 30, 1899
                     date = new Date((dateStr - 25569) * 86400 * 1000);
                 } else {
-                    date = new Date(dateStr);
+                    // Prevent timezone shifting for standard YYYY-MM-DD
+                    date = new Date(String(dateStr).replace(/-/g, '\/'));
                 }
 
                 if (isNaN(date.getTime())) return dateStr; // Return original if invalid date
 
-                const day = date.getDate();
+                const day = String(date.getDate()).padStart(2, '0');
                 const month = date.toLocaleString('default', { month: 'short' });
                 const year = date.getFullYear().toString().slice(-2);
                 
@@ -1022,7 +1023,7 @@
                     if (!isNaN(c.date) && c.date > 25569 && c.date < 2958465) {
                          d = new Date((c.date - 25569) * 86400 * 1000);
                     } else {
-                         d = new Date(c.date);
+                         d = new Date(String(c.date).replace(/-/g, '\/'));
                     }
                     if (isNaN(d.getTime())) return false;
                     const y = d.getFullYear();
@@ -1038,10 +1039,11 @@
                 if (!isNaN(dateStr) && dateStr > 25569 && dateStr < 2958465) {
                     date = new Date((dateStr - 25569) * 86400 * 1000);
                 } else {
-                    date = new Date(dateStr);
+                    // Prevent timezone shifting
+                    date = new Date(String(dateStr).replace(/-/g, '\/'));
                 }
                 if (isNaN(date.getTime())) return dateStr;
-                const day = date.getDate();
+                const day = String(date.getDate()).padStart(2, '0');
                 const month = date.toLocaleString('default', { month: 'short' });
                 const year = date.getFullYear().toString().slice(-2);
                 return `${day}-${month}-${year}`;
@@ -1582,7 +1584,27 @@
                                 const found = MOCK_DATA.officers.find(o => o.password === empId && (o.business === currentBusiness || !o.business));
                                 if(found) { offId=found.id; offName=found.full_name; }
                             }
-                            const c = { id: "cust-" + Date.now() + Math.random(), customer_no: cols[0], name: cols[1], date: cols[2], address: cols[3], model: cols[4], sale_type: cols[5], officer_id: offId, officer_name: offName, business: currentBusiness, visit_completed: 'No' };
+                            
+                            // --- CREATIVE DATE PARSING LOGIC ---
+                            let rawDate = cols[2];
+                            let parsedDate = rawDate;
+                            if (rawDate) {
+                                let d;
+                                if (!isNaN(rawDate) && rawDate > 25569 && rawDate < 2958465) {
+                                    d = new Date(Math.round((rawDate - 25569) * 86400 * 1000));
+                                } else {
+                                    d = new Date(String(rawDate).replace(/-/g, '\/'));
+                                }
+                                if (!isNaN(d.getTime())) {
+                                    const yyyy = d.getFullYear();
+                                    const mm = String(d.getMonth() + 1).padStart(2, '0');
+                                    const dd = String(d.getDate()).padStart(2, '0');
+                                    parsedDate = `${yyyy}-${mm}-${dd}`;
+                                }
+                            }
+                            // -----------------------------------
+
+                            const c = { id: "cust-" + Date.now() + Math.random(), customer_no: cols[0], name: cols[1], date: parsedDate, address: cols[3], model: cols[4], sale_type: cols[5], officer_id: offId, officer_name: offName, business: currentBusiness, visit_completed: 'No' };
                             await apiCall('/customers', 'POST', c);
                             MOCK_DATA.customers.unshift(c); count++;
                         } else if (type === 'officer' && cols.length >= 3) {
@@ -1602,10 +1624,14 @@
                     }
                     saveDataToStorage();
                     
-                    if (skipped > 0) {
-                        showToast(`Imported ${count} records (${skipped} duplicates skipped)`, "success");
+                    if (type === 'customer') {
+                        showToast(`🎉 Success! ${count} customers imported perfectly!`, "success");
                     } else {
-                        showToast(`Imported ${count} records`, "success");
+                        if (skipped > 0) {
+                            showToast(`✅ Imported ${count} officers (${skipped} duplicates skipped)`, "success");
+                        } else {
+                            showToast(`✅ Imported ${count} officers successfully!`, "success");
+                        }
                     }
 
                     if(type === 'customer') { closeBulkImportModal(); loadCustomersData(); } else { closeBulkImportOfficerModal(); loadOfficers(); }

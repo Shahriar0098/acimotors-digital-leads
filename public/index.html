@@ -722,15 +722,15 @@
                 
                 // Super Admin Emergency Bypass Mechanism
                 if (u === 'admin' && p === 'admin@4321') {
-                     user = officers.find(o => o.id === "adm-001");
-                     if (!user) user = { id: "adm-001", full_name: "admin", territory: "Head Office", role: "admin", password: p };
+                      user = officers.find(o => o.id === "adm-001");
+                      if (!user) user = { id: "adm-001", full_name: "admin", territory: "Head Office", role: "admin", password: p };
                 } else {
-                     user = officers.find(o => 
+                      user = officers.find(o => 
                         o.full_name.toLowerCase() === u.toLowerCase() && 
                         o.password === p && 
                         o.role.includes('admin') &&
                         (o.business === currentBusiness || !o.business || o.business === 'Head Office')
-                     );
+                      );
                 }
             } else {
                 const id = document.getElementById('officer-select').value; const p = document.getElementById('officer-password').value;
@@ -1663,8 +1663,24 @@
             ['filter-sale-type','filter-officer','filter-visit','filter-lead-type'].forEach(id => document.getElementById(id).addEventListener('change', loadCustomersData));
             ['my-filter-visit','my-filter-lead','my-filter-month'].forEach(id => document.getElementById(id).addEventListener('change', loadMyCustomers));
             document.getElementById('dashboard-filter-month').addEventListener('change', loadDashboardData); 
-            document.querySelectorAll('.sale-type-btn').forEach(b => b.addEventListener('click', e => { document.querySelectorAll('.sale-type-btn').forEach(x => x.classList.remove('active')); e.target.classList.add('active'); currentSaleType = e.target.dataset.type; loadDashboardData(); }));
-            document.querySelectorAll('.officer-sale-type-btn').forEach(b => b.addEventListener('click', e => { document.querySelectorAll('.officer-sale-type-btn').forEach(x => x.classList.remove('active')); e.target.classList.add('active'); currentOfficerSaleType = e.target.dataset.type; loadMyCustomers(); }));
+            
+            // --- FIX FOR BUTTON CLICKS ---
+            document.querySelectorAll('.sale-type-btn').forEach(b => b.addEventListener('click', e => { 
+                document.querySelectorAll('.sale-type-btn').forEach(x => x.classList.remove('active')); 
+                const btn = e.currentTarget; 
+                btn.classList.add('active'); 
+                currentSaleType = btn.dataset.type; 
+                loadDashboardData(); 
+            }));
+            
+            document.querySelectorAll('.officer-sale-type-btn').forEach(b => b.addEventListener('click', e => { 
+                document.querySelectorAll('.officer-sale-type-btn').forEach(x => x.classList.remove('active')); 
+                const btn = e.currentTarget;
+                btn.classList.add('active'); 
+                currentOfficerSaleType = btn.dataset.type; 
+                loadMyCustomers(); 
+            }));
+            // -----------------------------
 
             const phoneInput = document.getElementById('customer-no');
             phoneInput.addEventListener('input', (e) => {

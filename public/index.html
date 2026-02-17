@@ -1032,6 +1032,7 @@
                     const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
                     const daysLabel = diffDays > 0 ? `${diffDays} days ago` : 'Today';
                     const ageColor = diffDays > 30 ? 'var(--danger)' : 'var(--text-muted)';
+                    const hasLongNote = c.field_visit_notes && c.field_visit_notes.length > 25;
 
                     return `
                     <tr>
@@ -1050,7 +1051,14 @@
                         <td>${c.officer_name || '<span class="text-muted">Unassigned</span>'}</td>
                         <td>${getSaleTypeBadge(c.sale_type)}</td>
                         <td>${getLeadBadge(c.customer_type)}</td>
-                        <td><div style="max-width:200px; font-size:0.85rem; font-style:italic; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${c.field_visit_notes || ''}">${c.field_visit_notes || '-'}</div></td>
+                        <td>
+                            <div onclick="if(this.style.whiteSpace==='nowrap'){this.style.whiteSpace='normal';this.style.backgroundColor='#F3F4F6';this.style.padding='8px';this.style.borderRadius='8px';}else{this.style.whiteSpace='nowrap';this.style.backgroundColor='transparent';this.style.padding='0';}" 
+                                 style="max-width:250px; font-size:0.85rem; font-style:italic; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; cursor:pointer; transition:all 0.2s; color:var(--text-muted);" 
+                                 title="Click to toggle full text">
+                                ${hasLongNote ? '<i class="fas fa-expand-alt" style="font-size:0.7rem; color:var(--primary); margin-right:4px;"></i>' : ''}
+                                ${c.field_visit_notes ? `"${c.field_visit_notes}"` : '-'}
+                            </div>
+                        </td>
                     </tr>
                 `}).join('') : `<tr><td colspan="8" class="empty-state">No visited customers found matching criteria</td></tr>`;
 

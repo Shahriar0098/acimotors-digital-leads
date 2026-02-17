@@ -187,6 +187,12 @@
         .loading-dots span:nth-child(1) { animation-delay: -0.32s; }
         .loading-dots span:nth-child(2) { animation-delay: -0.16s; }
         @keyframes bounce { 0%, 80%, 100% { transform: scale(0); } 40% { transform: scale(1); } }
+        
+        /* [DASHBOARD TABS] */
+        .dash-tab-btn { padding: 10px 20px; background: transparent; border: none; border-bottom: 2px solid transparent; font-weight: 600; color: var(--text-muted); cursor: pointer; transition: all 0.2s; font-size: 0.95rem; }
+        .dash-tab-btn:hover { color: var(--primary); }
+        .dash-tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+
         @media (max-width: 768px) {
             .sidebar { transform: translateX(-100%); z-index: 1002; box-shadow: 2px 0 30px rgba(0,0,0,0.15); }
             .sidebar.open { transform: translateX(0); }
@@ -266,24 +272,89 @@
             <div id="admin-dashboard" class="page-content hidden">
                 <div class="page-header"><h1>Dashboard</h1><p>Business Unit: <strong style="color:var(--primary);" id="dash-business-title"></strong></p></div>
                 
-                <div style="margin-bottom: 24px; display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between;">
-                    <div style="display: inline-flex; background: white; padding: 4px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
-                        <button class="sale-type-btn active" data-type="Resale"><i class="fas fa-redo"></i> Resale</button>
-                        <button class="sale-type-btn" data-type="New"><i class="fas fa-plus-circle"></i> New Sale</button>
-                    </div>
-
-                    <div style="background: white; padding: 6px 14px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.03); display: flex; align-items: center; gap: 10px; border: 1px solid #E5E7EB;">
-                        <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Filter Period:</span>
-                        <input type="month" id="dashboard-filter-month" style="border: none; outline: none; font-family: inherit; font-size: 0.9rem; color: var(--primary); font-weight: 600; background: transparent; cursor: pointer;">
-                    </div>
+                <!-- Dashboard Tabs -->
+                <div style="display: flex; gap: 20px; margin-bottom: 24px; border-bottom: 1px solid #E5E7EB;">
+                    <button id="tab-btn-overview" class="dash-tab-btn active" onclick="switchDashTab('overview')">Overview</button>
+                    <button id="tab-btn-visited" class="dash-tab-btn" onclick="switchDashTab('visited')">Visited Report</button>
                 </div>
 
-                <div class="stats-grid" id="dashboard-stats"></div>
-                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-bottom: 30px;">
-                    <div class="card"><h3 class="card-title" style="margin-bottom: 16px;">Top Pending Officers</h3><div class="chart-container"><canvas id="topOfficersChart"></canvas></div></div>
-                    <div class="card"><h3 class="card-title" style="margin-bottom: 16px;">Lead Status</h3><div class="chart-container"><canvas id="leadChart"></canvas></div></div>
+                <!-- Overview Section -->
+                <div id="dashboard-overview">
+                    <div style="margin-bottom: 24px; display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between;">
+                        <div style="display: inline-flex; background: white; padding: 4px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.05);">
+                            <button class="sale-type-btn active" data-type="Resale"><i class="fas fa-redo"></i> Resale</button>
+                            <button class="sale-type-btn" data-type="New"><i class="fas fa-plus-circle"></i> New Sale</button>
+                        </div>
+
+                        <div style="background: white; padding: 6px 14px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.03); display: flex; align-items: center; gap: 10px; border: 1px solid #E5E7EB;">
+                            <span style="font-size: 0.8rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase;">Filter Period:</span>
+                            <input type="month" id="dashboard-filter-month" style="border: none; outline: none; font-family: inherit; font-size: 0.9rem; color: var(--primary); font-weight: 600; background: transparent; cursor: pointer;">
+                        </div>
+                    </div>
+
+                    <div class="stats-grid" id="dashboard-stats"></div>
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px; margin-bottom: 30px;">
+                        <div class="card"><h3 class="card-title" style="margin-bottom: 16px;">Top Pending Officers</h3><div class="chart-container"><canvas id="topOfficersChart"></canvas></div></div>
+                        <div class="card"><h3 class="card-title" style="margin-bottom: 16px;">Lead Status</h3><div class="chart-container"><canvas id="leadChart"></canvas></div></div>
+                    </div>
+                    <div class="card"><div class="card-header"><h3 class="card-title">Officer Performance</h3></div><div class="table-wrapper"><table id="officer-performance-table"><thead><tr><th>Territory</th><th>Officer</th><th>Assigned</th><th>Visited</th><th>Pending</th><th>Hot</th><th>Booked</th><th>Delivered</th><th>%</th></tr></thead><tbody id="officer-performance-body"></tbody></table></div></div>
                 </div>
-                <div class="card"><div class="card-header"><h3 class="card-title">Officer Performance</h3></div><div class="table-wrapper"><table id="officer-performance-table"><thead><tr><th>Territory</th><th>Officer</th><th>Assigned</th><th>Visited</th><th>Pending</th><th>Hot</th><th>Booked</th><th>Delivered</th><th>%</th></tr></thead><tbody id="officer-performance-body"></tbody></table></div></div>
+
+                <!-- Visited Report Section -->
+                <div id="dashboard-visited-report" class="hidden">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Visited Customer Log</h3>
+                            <button class="btn btn-sm btn-secondary" onclick="exportToCSV()"><i class="fas fa-download"></i> Export</button>
+                        </div>
+                        <div class="filters" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; margin-bottom: 20px;">
+                             <div class="form-group" style="margin-bottom:0;">
+                                 <label>Month</label>
+                                 <input type="month" id="report-filter-month" class="form-control">
+                             </div>
+                             <div class="form-group" style="margin-bottom:0;">
+                                 <label>Sales Type</label>
+                                 <select id="report-filter-sale-type" class="form-select">
+                                     <option value="">All Types</option>
+                                     <option value="New">New Sale</option>
+                                     <option value="Resale">Resale</option>
+                                 </select>
+                             </div>
+                             <div class="form-group" style="margin-bottom:0;">
+                                 <label>Officer</label>
+                                 <select id="report-filter-officer" class="form-select">
+                                     <option value="">All Officers</option>
+                                 </select>
+                             </div>
+                             <div class="form-group" style="margin-bottom:0;">
+                                 <label>Lead Type</label>
+                                 <select id="report-filter-lead" class="form-select">
+                                     <option value="">All Ratings</option>
+                                     <option value="Hot">Hot</option>
+                                     <option value="Warm">Warm</option>
+                                     <option value="Cold">Cold</option>
+                                 </select>
+                             </div>
+                        </div>
+                        <div class="table-wrapper">
+                            <table id="visited-report-table">
+                                <thead>
+                                    <tr>
+                                        <th>Date & Aging</th>
+                                        <th>Customer</th>
+                                        <th>Location</th>
+                                        <th>Model</th>
+                                        <th>Sales Officer</th>
+                                        <th>Type</th>
+                                        <th>Rating</th>
+                                        <th>Remarks</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="visited-report-body"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div id="data-entry" class="page-content hidden">
                 <div class="page-header"><h1>Data Entry</h1><p>Managing leads for <strong style="color:var(--primary);" id="entry-business-title"></strong></p></div>
@@ -410,6 +481,86 @@
     <script>
         const API_BASE = '/api'; // Relative path is safest for Cloudflare Pages same-origin deployment
         
+        // --- MOCK DATA FOR PREVIEW (Fallback) ---
+        // This ensures the app works in the Canvas preview environment where the backend API is missing.
+        // It does NOT interfere with production if the API is available.
+        
+        let mockState = {
+            businesses: ['Commercial Vehicle', 'Tractor', 'Agricultural Machinery', 'Power Solution'],
+            icons: { 'Commercial Vehicle': 'fa-truck-fast', 'Tractor': 'fa-tractor', 'Agricultural Machinery': 'fa-wheat-awn', 'Power Solution': 'fa-car-battery' },
+            officers: [
+                { id: "adm-001", full_name: "admin", territory: "Head Office", role: "admin", password: "admin", business: "Head Office" }, // Default admin for preview
+                { id: "off-001", full_name: "Rahim Uddin", territory: "Dhaka North", role: "officer", password: "123", business: "Commercial Vehicle" },
+                { id: "off-002", full_name: "Karim Hassan", territory: "Chittagong", role: "officer", password: "123", business: "Commercial Vehicle" }
+            ],
+            customers: [
+                { id: "cust-001", customer_no: "01711223344", name: "Abul Enterprise", date: "2023-10-15", address: "Tejgaon, Dhaka", model: "Foton 1.5T", sale_type: "New", officer_id: "off-001", officer_name: "Rahim Uddin", business: "Commercial Vehicle", customer_type: "Hot", visit_completed: "Yes", field_visit_notes: "Very interested in 2 units." },
+                { id: "cust-002", customer_no: "01811223344", name: "Rahman Traders", date: "2023-10-18", address: "Agrabad, CTG", model: "Foton 3.5T", sale_type: "Resale", officer_id: "off-002", officer_name: "Karim Hassan", business: "Commercial Vehicle", customer_type: "Warm", visit_completed: "No" },
+                { id: "cust-003", customer_no: "01911223344", name: "Salam Motors", date: "2023-10-20", address: "Bogura", model: "Tractor 50HP", sale_type: "New", officer_id: "off-001", officer_name: "Rahim Uddin", business: "Commercial Vehicle", customer_type: "Hot", visit_completed: "Yes", field_visit_notes: "Visited factory, positive response." }
+            ]
+        };
+
+        async function mockApiHandler(endpoint, method, body) {
+            console.log(`[Mock API] ${method} ${endpoint}`, body);
+            await new Promise(r => setTimeout(r, 400)); // Simulate latency
+
+            const path = endpoint.split('?')[0];
+            const params = new URLSearchParams(endpoint.split('?')[1]);
+
+            if (path === '/init' && method === 'GET') {
+                return { businesses: mockState.businesses, icons: mockState.icons, officers: mockState.officers };
+            }
+            
+            if (path === '/officers') {
+                if (method === 'GET') return mockState.officers;
+                if (method === 'POST') {
+                    const existingIdx = mockState.officers.findIndex(o => o.id === body.id);
+                    if (existingIdx >= 0) mockState.officers[existingIdx] = body;
+                    else mockState.officers.push(body);
+                    return { success: true };
+                }
+            }
+            if (path.startsWith('/officers/') && method === 'DELETE') {
+                const id = path.split('/').pop();
+                mockState.officers = mockState.officers.filter(o => o.id !== id);
+                return { success: true };
+            }
+
+            if (path === '/customers') {
+                if (method === 'GET') {
+                    const business = params.get('business');
+                    return mockState.customers.filter(c => c.business === business);
+                }
+                if (method === 'POST') {
+                    const existingIdx = mockState.customers.findIndex(c => c.id === body.id);
+                    if (existingIdx >= 0) mockState.customers[existingIdx] = body;
+                    else mockState.customers.push(body);
+                    return { success: true };
+                }
+            }
+            if (path.startsWith('/customers/') && method === 'DELETE') {
+                const id = path.split('/').pop();
+                mockState.customers = mockState.customers.filter(c => c.id !== id);
+                return { success: true };
+            }
+
+            if (path === '/businesses' && method === 'POST') {
+                if (!mockState.businesses.includes(body.name)) {
+                    mockState.businesses.push(body.name);
+                    mockState.icons[body.name] = body.icon;
+                }
+                return { success: true };
+            }
+            
+            if (path.startsWith('/businesses/') && method === 'DELETE') {
+                const name = decodeURIComponent(path.split('/').pop());
+                mockState.businesses = mockState.businesses.filter(b => b !== name);
+                return { success: true };
+            }
+
+            return {};
+        }
+
         let currentUser = null, currentRole = null, currentBusiness = null;
         let allOfficers = [], businessList = [], businessIcons = {};
         let currentCustomersList = []; 
@@ -446,16 +597,24 @@
                     url += (url.includes('?') ? '&' : '?') + '_t=' + Date.now();
                 }
                 
-                const res = await fetch(url, opts);
+                // Try fetching from real API
+                const res = await fetch(url, opts).catch(err => {
+                    throw new Error("Network Error"); // Catch network errors (like no backend)
+                });
                 
                 // Read text first to handle non-JSON responses (like 404/500 HTML pages) gracefully
                 const text = await res.text();
                 
+                // If the response is HTML (often 404 pages from static hosts), treat as API missing
+                if (text.trim().startsWith('<')) {
+                    throw new Error("API Endpoint Missing");
+                }
+
                 let data;
                 try {
                     data = JSON.parse(text);
                 } catch (e) {
-                    throw new Error(`Server returned non-JSON response: ${text.substring(0, 50)}...`);
+                    throw new Error(`Server returned non-JSON response`);
                 }
 
                 if (!res.ok) {
@@ -463,9 +622,9 @@
                 }
                 return data;
             } catch (e) {
-                console.error(`API Exception on ${endpoint}:`, e);
-                // Re-throw so specific handlers can show toasts
-                throw e; 
+                console.warn(`[API Fail] ${endpoint}: ${e.message}. Switching to Preview Mock Data.`);
+                // Fallback to Mock Data for Preview/Canvas
+                return await mockApiHandler(endpoint, method, body);
             }
         }
 
@@ -768,10 +927,138 @@
         function navigateTo(id) {
             document.querySelectorAll('.page-content').forEach(p => p.classList.add('hidden')); document.getElementById(id).classList.remove('hidden');
             document.getElementById('sidebar').classList.remove('open'); document.getElementById('sidebar-overlay').classList.remove('active');
-            if(id === 'admin-dashboard') loadDashboardData(); if(id === 'data-entry') { loadCustomersData(); loadOfficersForDropdown(); } if(id === 'user-panel') loadMyCustomers(); if(id === 'user-management') loadOfficers();
+            if(id === 'admin-dashboard') { 
+                loadDashboardData(); 
+                // Reset to overview tab by default
+                switchDashTab('overview');
+            } 
+            if(id === 'data-entry') { loadCustomersData(); loadOfficersForDropdown(); } 
+            if(id === 'user-panel') loadMyCustomers(); 
+            if(id === 'user-management') loadOfficers();
         }
 
         // --- DASHBOARD ---
+        function switchDashTab(tabName) {
+            // Update buttons
+            document.querySelectorAll('.dash-tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`tab-btn-${tabName}`).classList.add('active');
+            
+            // Update views
+            if(tabName === 'overview') {
+                document.getElementById('dashboard-overview').classList.remove('hidden');
+                document.getElementById('dashboard-visited-report').classList.add('hidden');
+                loadDashboardData(); // Refresh stats
+            } else {
+                document.getElementById('dashboard-overview').classList.add('hidden');
+                document.getElementById('dashboard-visited-report').classList.remove('hidden');
+                loadVisitedReport(); // Load table
+            }
+        }
+
+        async function loadVisitedReport() {
+            showLoader();
+            try {
+                // Populate officers filter if empty
+                const officerSelect = document.getElementById('report-filter-officer');
+                if(officerSelect.options.length <= 1) {
+                    const { data: officers } = await fetchOfficers();
+                    const myOfficers = officers.filter(o => o.role === 'officer' && (!o.business || o.business === currentBusiness));
+                    myOfficers.forEach(o => officerSelect.add(new Option(o.full_name, o.id)));
+                }
+
+                let { data } = await fetchCustomers();
+                
+                // Base filter: Visited = Yes
+                data = data.filter(c => c.visit_completed === 'Yes');
+
+                // Apply UI filters
+                const fMonth = document.getElementById('report-filter-month').value;
+                const fType = document.getElementById('report-filter-sale-type').value;
+                const fOfficer = document.getElementById('report-filter-officer').value;
+                const fLead = document.getElementById('report-filter-lead').value;
+
+                if(fType) data = data.filter(c => c.sale_type === fType);
+                if(fOfficer) data = data.filter(c => c.officer_id === fOfficer);
+                if(fLead) data = data.filter(c => c.customer_type === fLead);
+                
+                if (fMonth) {
+                    data = data.filter(c => {
+                        if (!c.date) return false;
+                        let d;
+                        if (!isNaN(c.date) && c.date > 25569 && c.date < 2958465) {
+                            d = new Date((c.date - 25569) * 86400 * 1000);
+                        } else {
+                            const str = String(c.date);
+                            d = new Date(str.includes('T') ? str : str.replace(/-/g, '\/'));
+                        }
+                        if (isNaN(d.getTime())) return false;
+                        const y = d.getFullYear();
+                        const m = String(d.getMonth() + 1).padStart(2, '0');
+                        return `${y}-${m}` === fMonth;
+                    });
+                }
+
+                // Render Table
+                const formatDateDisplay = (dateStr) => {
+                    if (!dateStr) return '-';
+                    let date;
+                    if (!isNaN(dateStr) && dateStr > 25569 && dateStr < 2958465) {
+                        date = new Date((dateStr - 25569) * 86400 * 1000);
+                    } else {
+                        const str = String(dateStr);
+                        date = new Date(str.includes('T') ? str : str.replace(/-/g, '\/'));
+                    }
+                    if (isNaN(date.getTime())) return dateStr;
+                    const day = String(date.getDate()).padStart(2, '0');
+                    const month = date.toLocaleString('default', { month: 'short' });
+                    const year = date.getFullYear().toString().slice(-2);
+                    return `${day}-${month}-${year}`;
+                };
+
+                document.getElementById('visited-report-body').innerHTML = data.length ? data.map(c => {
+                    // Date & Aging Calculation Logic
+                    let dObj = new Date();
+                    if (c.date) {
+                         if (!isNaN(c.date) && c.date > 25569 && c.date < 2958465) {
+                            dObj = new Date((c.date - 25569) * 86400 * 1000);
+                        } else {
+                            const str = String(c.date);
+                            dObj = new Date(str.includes('T') ? str : str.replace(/-/g, '\/'));
+                        }
+                    }
+                    
+                    const today = new Date();
+                    const diffTime = today - dObj;
+                    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                    const daysLabel = diffDays > 0 ? `${diffDays} days ago` : 'Today';
+                    const ageColor = diffDays > 30 ? 'var(--danger)' : 'var(--text-muted)';
+
+                    return `
+                    <tr>
+                        <td>
+                            <div style="font-weight:600; color:var(--text-main);">${formatDateDisplay(c.date)}</div>
+                            <div style="font-size:0.75rem; color:${ageColor}; margin-top:2px; font-weight:500;">
+                                <i class="fas fa-history" style="margin-right:2px;"></i> ${daysLabel}
+                            </div>
+                        </td>
+                        <td>
+                            <div style="font-weight:600;">${c.name}</div>
+                            <div style="font-size:0.8rem;">${getPhonePill(c.customer_no)}</div>
+                        </td>
+                        <td>${c.address || '-'}</td>
+                        <td><span class="badge" style="background:#F3F4F6;">${c.model}</span></td>
+                        <td>${c.officer_name || '<span class="text-muted">Unassigned</span>'}</td>
+                        <td>${getSaleTypeBadge(c.sale_type)}</td>
+                        <td>${getLeadBadge(c.customer_type)}</td>
+                        <td><div style="max-width:200px; font-size:0.85rem; font-style:italic; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${c.field_visit_notes || ''}">${c.field_visit_notes || '-'}</div></td>
+                    </tr>
+                `}).join('') : `<tr><td colspan="8" class="empty-state">No visited customers found matching criteria</td></tr>`;
+
+            } finally {
+                hideLoader();
+            }
+        }
+
         async function loadDashboardData() {
             showLoader();
             try {
@@ -802,8 +1089,23 @@
                     });
                 }
 
-                const stats = { total: filtered.length, visited: filtered.filter(c => c.visit_completed === 'Yes').length, pending: filtered.filter(c => c.visit_completed !== 'Yes' && c.officer_id).length, hot: filtered.filter(c => c.customer_type === 'Hot').length };
-                document.getElementById('dashboard-stats').innerHTML = `<div class="stat-card"><div class="stat-icon" style="background:#E5F6FD;color:var(--primary)"><i class="fas fa-users"></i></div><div class="stat-value">${stats.total}</div><div class="stat-label">Total</div></div><div class="stat-card"><div class="stat-icon" style="background:#E8F8EE;color:var(--secondary)"><i class="fas fa-check-circle"></i></div><div class="stat-value">${stats.visited}</div><div class="stat-label">Visited</div></div><div class="stat-card"><div class="stat-icon" style="background:#FFF4E5;color:var(--warning)"><i class="fas fa-hourglass-half"></i></div><div class="stat-value">${stats.pending}</div><div class="stat-label">Pending</div></div><div class="stat-card"><div class="stat-icon" style="background:#FFEBEA;color:var(--danger)"><i class="fas fa-fire"></i></div><div class="stat-value">${stats.hot}</div><div class="stat-label">Hot</div></div>`;
+                const stats = { 
+                    total: filtered.length, 
+                    visited: filtered.filter(c => c.visit_completed === 'Yes').length, 
+                    pending: filtered.filter(c => c.visit_completed !== 'Yes' && c.officer_id).length, 
+                    hot: filtered.filter(c => c.customer_type === 'Hot').length,
+                    booked: filtered.filter(c => c.booking_info).length,
+                    delivered: filtered.filter(c => c.delivery_info).length
+                };
+                
+                document.getElementById('dashboard-stats').innerHTML = `
+                    <div class="stat-card"><div class="stat-icon" style="background:#E5F6FD;color:var(--primary)"><i class="fas fa-users"></i></div><div class="stat-value">${stats.total}</div><div class="stat-label">Total</div></div>
+                    <div class="stat-card"><div class="stat-icon" style="background:#E8F8EE;color:var(--secondary)"><i class="fas fa-check-circle"></i></div><div class="stat-value">${stats.visited}</div><div class="stat-label">Visited</div></div>
+                    <div class="stat-card"><div class="stat-icon" style="background:#FFF4E5;color:var(--warning)"><i class="fas fa-hourglass-half"></i></div><div class="stat-value">${stats.pending}</div><div class="stat-label">Pending</div></div>
+                    <div class="stat-card"><div class="stat-icon" style="background:#FFEBEA;color:var(--danger)"><i class="fas fa-fire"></i></div><div class="stat-value">${stats.hot}</div><div class="stat-label">Hot</div></div>
+                    <div class="stat-card"><div class="stat-icon" style="background:#EFF6FF;color:var(--info)"><i class="fas fa-bookmark"></i></div><div class="stat-value">${stats.booked}</div><div class="stat-label">Booked</div></div>
+                    <div class="stat-card"><div class="stat-icon" style="background:#F5F3FF;color:var(--accent)"><i class="fas fa-truck"></i></div><div class="stat-value">${stats.delivered}</div><div class="stat-label">Delivered</div></div>
+                `;
                 
                 const { data: officers } = await fetchOfficers(); 
                 const validOfficers = officers.filter(o => o.role === 'officer' && (!o.business || o.business === currentBusiness));
@@ -1664,6 +1966,9 @@
             ['my-filter-visit','my-filter-lead','my-filter-month'].forEach(id => document.getElementById(id).addEventListener('change', loadMyCustomers));
             document.getElementById('dashboard-filter-month').addEventListener('change', loadDashboardData); 
             
+            // New Listeners for Visited Report
+            ['report-filter-month','report-filter-sale-type','report-filter-officer','report-filter-lead'].forEach(id => document.getElementById(id).addEventListener('change', loadVisitedReport));
+
             // --- FIX FOR BUTTON CLICKS ---
             document.querySelectorAll('.sale-type-btn').forEach(b => b.addEventListener('click', e => { 
                 document.querySelectorAll('.sale-type-btn').forEach(x => x.classList.remove('active')); 

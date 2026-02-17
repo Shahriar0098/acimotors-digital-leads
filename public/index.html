@@ -1315,8 +1315,22 @@
                     return getTimestamp(b.date) - getTimestamp(a.date);
                 });
 
-                const stats = { total: myData.length, visited: myData.filter(c=>c.visit_completed==='Yes').length, pending: myData.filter(c=>c.visit_completed!=='Yes').length, hot: myData.filter(c=>c.customer_type==='Hot').length };
-                document.getElementById('my-stats-strip').innerHTML = `<div class="strip-item"><div class="strip-label">Total</div><div class="strip-value">${stats.total}</div></div><div class="strip-item"><div class="strip-label">Visited</div><div class="strip-value text-success">${stats.visited}</div></div><div class="strip-item"><div class="strip-label">Pending</div><div class="strip-value text-warning">${stats.pending}</div></div><div class="strip-item"><div class="strip-label">Hot</div><div class="strip-value text-danger">${stats.hot}</div></div>`;
+                const stats = { 
+                    total: myData.length, 
+                    visited: myData.filter(c=>c.visit_completed==='Yes').length, 
+                    pending: myData.filter(c=>c.visit_completed!=='Yes').length, 
+                    hot: myData.filter(c=>c.customer_type==='Hot').length,
+                    booked: myData.filter(c=>c.booking_info).length,
+                    delivered: myData.filter(c=>c.delivery_info).length
+                };
+                document.getElementById('my-stats-strip').innerHTML = `
+                    <div class="strip-item"><div class="strip-label">Total</div><div class="strip-value">${stats.total}</div></div>
+                    <div class="strip-item"><div class="strip-label">Visited</div><div class="strip-value text-success">${stats.visited}</div></div>
+                    <div class="strip-item"><div class="strip-label">Pending</div><div class="strip-value text-warning">${stats.pending}</div></div>
+                    <div class="strip-item"><div class="strip-label">Hot</div><div class="strip-value text-danger">${stats.hot}</div></div>
+                    <div class="strip-item"><div class="strip-label">Booked</div><div class="strip-value" style="color:var(--info);">${stats.booked}</div></div>
+                    <div class="strip-item"><div class="strip-label">Delivered</div><div class="strip-value" style="color:var(--accent);">${stats.delivered}</div></div>
+                `;
                 
                 document.getElementById('my-customers-body').innerHTML = myData.map(c => {
                     const isVisited = c.visit_completed === 'Yes';

@@ -235,6 +235,23 @@
         .filter-pill { flex: 1 1 auto; background: white; border: 1px solid #E5E7EB; border-radius: 20px; padding: 8px 14px; font-size: 0.85rem; display: flex; align-items: center; gap: 8px; transition: all 0.2s; color: var(--text-main); }
         .filter-pill:focus-within { border-color: var(--primary); box-shadow: 0 2px 8px rgba(16, 185, 129, 0.15); transform: translateY(-1px); }
         .filter-pill select, .filter-pill input { border: none; background: transparent; font-size: 0.85rem; outline: none; color: var(--text-main); }
+        
+        /* Collapsible Rows & Visual Chips */
+        .chip-container { display: flex; gap: 8px; overflow-x: auto; padding: 4px 2px; scrollbar-width: none; -ms-overflow-style: none; -webkit-overflow-scrolling: touch; }
+        .chip-container::-webkit-scrollbar { display: none; }
+        .filter-chip { padding: 8px 14px; background: white; border: 1px solid #E5E7EB; border-radius: 20px; font-size: 0.8rem; font-weight: 600; color: var(--text-muted); cursor: pointer; white-space: nowrap; transition: all 0.2s ease; display: inline-flex; align-items: center; gap: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); height: 34px; border-collapse: collapse; outline: none; }
+        .filter-chip:hover { border-color: var(--primary); color: var(--primary); }
+        .filter-chip.active { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: white !important; border-color: transparent; box-shadow: 0 4px 10px rgba(16, 185, 129, 0.2); }
+        .filter-chip.active-danger { background: linear-gradient(135deg, var(--danger), #DC2626); color: white !important; border-color: transparent; box-shadow: 0 4px 10px rgba(239, 68, 68, 0.2); animation: pulse-red 2s infinite; }
+        
+        .customer-row-collapsible { cursor: pointer; transition: all 0.25s ease; position: relative; }
+        .customer-row-collapsible:hover { background-color: #F8FAFC !important; }
+        .collapse-chevron { display: inline-block; transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1); color: var(--text-muted); pointer-events: none; }
+        .customer-row-collapsible.expanded .collapse-chevron { transform: rotate(180deg); color: var(--primary); }
+        
+        /* Desktop/Mobile Common Extra Details behavior */
+        .customer-row-collapsible.collapsed .extra-details { display: none !important; }
+        .customer-row-collapsible.expanded .extra-details { display: block !important; }
         .officer-header-container { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; width: 100%; }
         .officer-profile-minimal { text-align: right; flex-shrink: 0; margin-left: 16px; }
         .officer-name-display { font-weight: 800; color: var(--primary); font-size: 1.1rem; line-height: 1.2; letter-spacing: -0.5px; }
@@ -438,6 +455,34 @@
             #my-customers-table td:nth-child(2) { padding: 16px; display: block; width: 100%; box-sizing: border-box; height: auto !important; }
             #my-customers-table td:nth-child(3) { padding: 0 16px 16px 16px; display: block; width: 100%; box-sizing: border-box; height: auto !important; }
             #my-customers-table td:last-child { padding: 12px 16px; background: #FAFAFA; border-top: 1px solid #eee; display: flex; justify-content: space-between; width: 100%; box-sizing: border-box; height: auto !important; }
+
+            /* Mobile-specific Collapsible Row rules */
+            #my-customers-table tbody tr.collapsed td:nth-child(3),
+            #my-customers-table tbody tr.collapsed td:last-child {
+                display: none !important;
+            }
+            #my-customers-table tbody tr.expanded td:nth-child(3) {
+                display: block !important;
+                padding: 0 16px 16px 16px;
+                border-bottom: none;
+            }
+            #my-customers-table tbody tr.expanded td:last-child {
+                display: flex !important;
+                padding: 12px 16px;
+                background: #FAFAFA;
+                border-top: 1px solid #eee;
+                justify-content: space-between;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            #my-customers-table tbody tr.expanded {
+                border: 1.5px solid rgba(16, 185, 129, 0.35) !important;
+                box-shadow: 0 8px 20px rgba(16, 185, 129, 0.08) !important;
+                background: #FDFDFD !important;
+            }
+            .mobile-only-badges { display: none; }
+            #my-customers-table tr.collapsed .mobile-only-badges { display: flex !important; }
+            .desktop-only-badges { display: none !important; }
         }
     </style>
 </head>
@@ -780,11 +825,38 @@
                 <div id="officer-tab-tasks">
                     <div style="margin-bottom: 24px;"><div style="display: inline-flex; background: white; padding: 4px; border-radius: 8px; box-shadow: 0 1px 4px rgba(0,0,0,0.05);"><button class="officer-sale-type-btn active" data-type="Resale"><i class="fas fa-redo"></i> Resale</button><button class="officer-sale-type-btn" data-type="New"><i class="fas fa-plus-circle"></i> NEW</button></div></div>
                     <div id="my-stats-strip" class="officer-stats-strip" style="gap:10px; margin-bottom:16px;"></div>
-                    <div class="officer-toolbar" style="margin-bottom:16px; gap:8px;">
-                        <div class="filter-pill" style="border-color: #FDE68A; padding:4px 10px; font-size:0.85rem;"><i class="fas fa-headset" style="color:#D97706;"></i><select id="my-filter-admin"><option value="">All Tasks</option><option value="Pending">Admin Followups</option></select></div>
-                        <div class="filter-pill" style="padding:4px 10px; font-size:0.85rem;"><i class="far fa-calendar-alt"></i><input type="month" id="my-filter-month"></div>
-                        <div class="filter-pill" style="padding:4px 10px; font-size:0.85rem;"><i class="fas fa-check-double"></i><select id="my-filter-visit"><option value="">All Status</option><option value="Yes">Completed</option><option value="No">Pending</option></select></div>
-                        <div class="filter-pill" style="padding:4px 10px; font-size:0.85rem;"><i class="fas fa-filter"></i><select id="my-filter-lead"><option value="">All Leads</option><option value="Hot">Hot</option><option value="Warm">Warm</option><option value="Cold">Cold</option></select></div>
+                    <!-- Modern Visual Filter Toggles (Mobile & Desktop Friendly) -->
+                    <div class="officer-toolbar" style="margin-bottom:16px; display:flex; flex-direction:column; gap:12px; height:auto; overflow:visible;">
+                        <!-- Top Filter Row: Month & Admin follow-up -->
+                        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; width:100%;">
+                            <div class="filter-chip" style="padding:6px 12px; cursor:default; height:36px; display:flex; align-items:center;">
+                                <i class="far fa-calendar-alt" style="color:var(--primary); margin-right:6px;"></i>
+                                <input type="month" id="my-filter-month" onchange="loadMyCustomers()" style="border:none; font-weight:700; font-size:0.8rem; outline:none; color:var(--text-main); cursor:pointer; background:transparent; width:115px;">
+                            </div>
+                            <button type="button" id="chip-admin-pending" class="filter-chip" style="height:36px;" onclick="toggleAdminFilter()"><i class="fas fa-headset"></i> Admin Follow-up</button>
+                        </div>
+                        
+                        <!-- Visit Status Chips -->
+                        <div class="chip-container" style="display:flex; gap:8px; overflow-x:auto; padding:2px 0; width:100%; border:none;">
+                            <button type="button" class="filter-chip active" id="chip-visit-all" onclick="setVisitFilter('')">All Status</button>
+                            <button type="button" class="filter-chip" id="chip-visit-yes" onclick="setVisitFilter('Yes')"><i class="fas fa-check-circle" style="color:#10B981; margin-right:4px;"></i> Visited</button>
+                            <button type="button" class="filter-chip" id="chip-visit-no" onclick="setVisitFilter('No')"><i class="fas fa-hourglass-half" style="color:#F59E0B; margin-right:4px;"></i> Pending</button>
+                        </div>
+                        
+                        <!-- Lead Type Chips -->
+                        <div class="chip-container" style="display:flex; gap:8px; overflow-x:auto; padding:2px 0; width:100%; border:none;">
+                            <button type="button" class="filter-chip active" id="chip-lead-all" onclick="setLeadFilter('')">All Leads</button>
+                            <button type="button" class="filter-chip" id="chip-lead-hot" onclick="setLeadFilter('Hot')"><i class="fas fa-fire" style="color:#EF4444; margin-right:4px;"></i> Hot</button>
+                            <button type="button" class="filter-chip" id="chip-lead-warm" onclick="setLeadFilter('Warm')"><i class="fas fa-bolt" style="color:#F59E0B; margin-right:4px;"></i> Warm</button>
+                            <button type="button" class="filter-chip" id="chip-lead-cold" onclick="setLeadFilter('Cold')"><i class="fas fa-snowflake" style="color:#3B82F6; margin-right:4px;"></i> Cold</button>
+                        </div>
+
+                        <!-- Hidden Native Selectors to maintain backward compatibility with original filter state logic -->
+                        <div class="hidden">
+                            <select id="my-filter-admin"><option value="">All Tasks</option><option value="Pending">Admin Followups</option></select>
+                            <select id="my-filter-visit"><option value="">All Status</option><option value="Yes">Completed</option><option value="No">Pending</option></select>
+                            <select id="my-filter-lead"><option value="">All Leads</option><option value="Hot">Hot</option><option value="Warm">Warm</option><option value="Cold">Cold</option></select>
+                        </div>
                     </div>
                     <div class="card" style="background: transparent; box-shadow: none; padding: 0;">
                         <div class="table-wrapper">
@@ -1028,6 +1100,90 @@
 
     <script>
         const API_BASE = '/api'; // Relative path is safest for Cloudflare Pages same-origin deployment
+        
+        // --- OFFICER PORTAL HELPER FUNCTIONS FOR COLLAPSIBLE CARDS AND CHIPS ---
+        window.toggleRowExpansion = function(id, event) {
+            const interactiveTags = ['A', 'BUTTON', 'TEXTAREA', 'INPUT', 'SELECT', 'I'];
+            if (event && event.target) {
+                if (interactiveTags.includes(event.target.tagName) || event.target.closest('a') || event.target.closest('button')) {
+                    return;
+                }
+            }
+            const tr = document.getElementById(`cust-row-${id}`);
+            if (tr) {
+                tr.classList.toggle('collapsed');
+                tr.classList.toggle('expanded');
+            }
+        };
+
+        window.toggleAdminFilter = function() {
+            const adminSelect = document.getElementById('my-filter-admin');
+            if (adminSelect) {
+                adminSelect.value = (adminSelect.value === 'Pending') ? '' : 'Pending';
+                loadMyCustomers();
+            }
+        };
+
+        window.setVisitFilter = function(val) {
+            const visitSelect = document.getElementById('my-filter-visit');
+            if (visitSelect) {
+                visitSelect.value = val;
+                loadMyCustomers();
+            }
+        };
+
+        window.setLeadFilter = function(val) {
+            const leadSelect = document.getElementById('my-filter-lead');
+            if (leadSelect) {
+                leadSelect.value = val;
+                loadMyCustomers();
+            }
+        };
+
+        window.syncFilterChips = function() {
+            const visitVal = document.getElementById('my-filter-visit') ? document.getElementById('my-filter-visit').value : '';
+            const leadVal = document.getElementById('my-filter-lead') ? document.getElementById('my-filter-lead').value : '';
+            const adminVal = document.getElementById('my-filter-admin') ? document.getElementById('my-filter-admin').value : '';
+
+            // Sync Visit Status chips
+            document.querySelectorAll('[id^="chip-visit-"]').forEach(el => el.classList.remove('active'));
+            if (visitVal === 'Yes') {
+                const el = document.getElementById('chip-visit-yes');
+                if (el) el.classList.add('active');
+            } else if (visitVal === 'No') {
+                const el = document.getElementById('chip-visit-no');
+                if (el) el.classList.add('active');
+            } else {
+                const el = document.getElementById('chip-visit-all');
+                if (el) el.classList.add('active');
+            }
+
+            // Sync Lead Type chips
+            document.querySelectorAll('[id^="chip-lead-"]').forEach(el => el.classList.remove('active'));
+            if (leadVal === 'Hot') {
+                const el = document.getElementById('chip-lead-hot');
+                if (el) el.classList.add('active');
+            } else if (leadVal === 'Warm') {
+                const el = document.getElementById('chip-lead-warm');
+                if (el) el.classList.add('active');
+            } else if (leadVal === 'Cold') {
+                const el = document.getElementById('chip-lead-cold');
+                if (el) el.classList.add('active');
+            } else {
+                const el = document.getElementById('chip-lead-all');
+                if (el) el.classList.add('active');
+            }
+
+            // Sync Admin Follow-up chip
+            const adminChip = document.getElementById('chip-admin-pending');
+            if (adminChip) {
+                if (adminVal === 'Pending') {
+                    adminChip.classList.add('active-danger');
+                } else {
+                    adminChip.classList.remove('active-danger');
+                }
+            }
+        };
         
         // --- MOCK DATA FOR PREVIEW (Fallback) ---
         // This ensures the app works in the Canvas preview environment where the backend API is missing.
@@ -3217,6 +3373,8 @@
                 const { data } = await fetchCustomers(); 
                 let myData = data.filter(c => c.officer_id === currentUser.id && isSaleTypeMatch(c.sale_type, currentOfficerSaleType));
                 
+                if (window.syncFilterChips) window.syncFilterChips();
+                
                 const visitFilter = document.getElementById('my-filter-visit').value;
                 const leadFilter = document.getElementById('my-filter-lead').value;
                 const monthFilter = document.getElementById('my-filter-month').value;
@@ -3429,7 +3587,56 @@
                         }
                     }
 
-                    return `<tr class="${rowClass}" style="${glowStyle}"><td style="vertical-align:top;">${getPhonePill(c.customer_no)}</td><td style="vertical-align:top;"><div>${nameHtml}<div style="font-size:0.8rem;color:var(--text-muted); margin-bottom:2px;"><i class="far fa-calendar-alt"></i> ${formatDateDisplay(c.date)}</div><div style="font-size:0.85rem;color:var(--text-muted);"><i class="fas fa-map-marker-alt"></i> ${c.address||'-'}</div><div style="margin-top:6px;"><span class="badge" style="background:#f2f2f7;">${c.model}</span></div>${daysSinceFollowupHtml}${adminAlert}${adminCommentHtml}</div></td><td style="vertical-align:top;"><div><div style="display:flex;gap:6px;margin-bottom:8px;">${getVisitBadge(c.visit_completed)} ${getLeadBadge(c.customer_type)}</div>${c.field_visit_notes ? `<div style="font-size:0.85rem;font-style:italic; white-space:pre-wrap; max-height:100px; overflow-y:auto;">${c.field_visit_notes}</div>` : '<span style="color:#ccc;">No notes</span>'}</div></td><td style="vertical-align:top;"><div style="display:flex; flex-direction:column; gap:8px; align-items:flex-end; width:100%;"><div style="display:flex; align-items:center; width:100%;">${actionButtons}${forwardBtn}</div></div></td></tr>`;
+                    const collapseChevron = `<span class="collapse-chevron" style="margin-left:8px;"><i class="fas fa-chevron-down"></i></span>`;
+                    
+                    const mobileBadges = `<div class="mobile-only-badges" style="display:none; gap:4px; align-items:center; margin-left:6px;">
+                        ${getVisitBadge(c.visit_completed)} 
+                        ${getLeadBadge(c.customer_type)}
+                    </div>`;
+
+                    return `<tr class="customer-row-collapsible collapsed ${rowClass}" id="cust-row-${c.id}" onclick="toggleRowExpansion('${c.id}', event)" style="${glowStyle}">
+                        <td style="vertical-align:middle; display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#FAFAFA;">
+                            ${getPhonePill(c.customer_no)}
+                            <div style="display:flex; align-items:center; gap:4px;">
+                                ${mobileBadges}
+                                ${collapseChevron}
+                            </div>
+                        </td>
+                        <td style="vertical-align:top;">
+                            <div>
+                                ${nameHtml}
+                                <div style="font-size:0.8rem;color:var(--text-muted); margin-bottom:2px;">
+                                    <i class="far fa-calendar-alt"></i> ${formatDateDisplay(c.date)}
+                                </div>
+                                <div class="extra-details">
+                                    <div style="font-size:0.85rem;color:var(--text-muted); margin-top:4px;"><i class="fas fa-map-marker-alt"></i> ${c.address||'-'}</div>
+                                    <div style="margin-top:6px;"><span class="badge" style="background:#f2f2f7;">${c.model}</span></div>
+                                    ${daysSinceFollowupHtml}
+                                    ${adminAlert}
+                                    ${adminCommentHtml}
+                                </div>
+                            </div>
+                        </td>
+                        <td style="vertical-align:top;">
+                            <div>
+                                <div class="desktop-only-badges" style="display:flex; gap:6px; margin-bottom:8px;">
+                                    ${getVisitBadge(c.visit_completed)} 
+                                    ${getLeadBadge(c.customer_type)}
+                                </div>
+                                <div class="extra-details">
+                                    ${c.field_visit_notes ? `<div style="font-size:0.85rem;font-style:italic; white-space:pre-wrap; max-height:100px; overflow-y:auto; border-left:2px solid #E5E7EB; padding-left:8px;">${c.field_visit_notes}</div>` : '<span style="color:#ccc;">No notes</span>'}
+                                </div>
+                            </div>
+                        </td>
+                        <td style="vertical-align:top;">
+                            <div style="display:flex; flex-direction:column; gap:8px; align-items:flex-end; width:100%;">
+                                <div style="display:flex; align-items:center; width:100%;">
+                                    ${actionButtons}
+                                    ${forwardBtn}
+                                </div>
+                            </div>
+                        </td>
+                    </tr>`;
                 }).join('');
             } finally {
                 if (!isCached) hideLoader();
@@ -3688,10 +3895,10 @@
         function getPhonePill(n) { 
             if (n && n.startsWith('+')) {
                 // WhatsApp Link for Foreign Numbers
-                return `<a href="https://wa.me/${n.replace('+', '')}" target="_blank" class="phone-pill" style="background: linear-gradient(135deg, #25D366, #128C7E);"><i class="fab fa-whatsapp"></i> ${n}</a>`;
+                return `<a href="https://wa.me/${n.replace('+', '')}" target="_blank" class="phone-pill" style="background: linear-gradient(135deg, #25D366, #128C7E);" onclick="event.stopPropagation();"><i class="fab fa-whatsapp"></i> ${n}</a>`;
             }
             // Standard Call Link for Local Numbers
-            return `<a href="tel:${n}" class="phone-pill"><i class="fas fa-phone"></i> ${n}</a>`; 
+            return `<a href="tel:${n}" class="phone-pill" onclick="event.stopPropagation();"><i class="fas fa-phone"></i> ${n}</a>`; 
         }
         function getSaleTypeBadge(t) { return `<span class="badge" style="background:${t==='Resale'?'#EBF3FF':'#F3E8FF'}">${t}</span>`; }
         function isSaleTypeMatch(st, target) {

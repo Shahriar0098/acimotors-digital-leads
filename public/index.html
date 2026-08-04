@@ -249,9 +249,17 @@
         .collapse-chevron { display: inline-block; transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1); color: var(--text-muted); pointer-events: none; }
         .customer-row-collapsible.expanded .collapse-chevron { transform: rotate(180deg); color: var(--primary); }
         
-        /* Pulsing Red Dot Unvisited Indicator */
-        .unvisited-indicator { position: absolute; top: 12px; right: 12px; width: 8px; height: 8px; background-color: var(--danger); border-radius: 50%; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); animation: pulse-red-dot 1.8s infinite cubic-bezier(0.66, 0, 0, 1); pointer-events: none; z-index: 99; }
-        @keyframes pulse-red-dot { 0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7); } 70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); } 100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); } }
+        /* Minimal Left Accent Border for Unvisited/Visited Customer Rows */
+        #my-customers-table tbody tr td:first-child {
+            border-left: 4px solid #E2E8F0;
+            transition: border-color 0.25s ease;
+        }
+        #my-customers-table tbody tr:not(.visited-row) td:first-child {
+            border-left: 4px solid var(--danger) !important;
+        }
+        #my-customers-table tbody tr.visited-row td:first-child {
+            border-left: 4px solid var(--primary) !important;
+        }
         
         /* Desktop/Mobile Common Extra Details behavior */
         .customer-row-collapsible.collapsed .extra-details { display: none !important; }
@@ -3655,10 +3663,7 @@
                         ${getLeadBadge(c.customer_type)}
                     </div>`;
 
-                    const unvisitedDot = !isVisited ? `<div class="unvisited-indicator" title="Visit Pending (Needs Attention)"></div>` : '';
-
                     return `<tr class="customer-row-collapsible collapsed ${rowClass}" id="cust-row-${c.id}" onclick="toggleRowExpansion('${c.id}', event)" style="${glowStyle}">
-                        ${unvisitedDot}
                         <td style="vertical-align:middle; display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#FAFAFA;">
                             ${getPhonePill(c.customer_no)}
                             <div style="display:flex; align-items:center; gap:4px;">

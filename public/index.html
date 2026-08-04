@@ -3666,7 +3666,8 @@
                     return `<tr class="customer-row-collapsible collapsed ${rowClass}" id="cust-row-${c.id}" onclick="toggleRowExpansion('${c.id}', event)" style="${glowStyle}">
                         <td style="vertical-align:middle; display:flex; justify-content:space-between; align-items:center; padding:10px 14px; background:#FAFAFA;">
                             ${getPhonePill(c.customer_no)}
-                            <div style="display:flex; align-items:center; gap:4px;">
+                            <div style="display:flex; align-items:center; gap:6px;">
+                                <span class="badge" style="background:#F1F5F9; color:#475569; font-weight:700; font-size:0.7rem; border-radius:6px; margin-right:4px; padding:2px 6px; border:1px solid #E2E8F0;">${c.model}</span>
                                 ${mobileBadges}
                                 ${collapseChevron}
                             </div>
